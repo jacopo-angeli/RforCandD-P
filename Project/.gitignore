@@ -1,0 +1,49 @@
+# Compiled Object files
+*.o
+*.ali
+*.obj
+
+# Executable files
+*.exe
+*.elf
+*.bin
+*.out
+
+# Project files that might contain sensitive information or user-specific settings
+*.gpr~
+*.gpr#*
+
+# GNAT Programming Studio (GPS) IDE generated files
+.gps/
+.gpr.ide/
+
+# Build directories
+build/
+obj/
+bin/
+lib/
+
+# Debug files
+*.dbg
+*.dSYM/
+
+# Backup files created by editors
+*~
+*.bak
+*.tmp
+*.swp
+
+# Dependency directories (uncomment if you use a package manager like Alire)
+# alire/
+
+# Log files
+*.log
+
+# Coverage files
+*.gcov
+*.gcda
+*.gcno
+
+# Other files to ignore that might be specific to your project
+# Add any files or directories specific to your project that should not be tracked
+
