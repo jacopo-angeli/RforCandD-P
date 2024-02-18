@@ -1,6 +1,8 @@
 package Node is
 
-   type Node;
+   type State is (LEADER, CANDIDATE, FOLLOWER);
+
+    type Node;
    type NodeAccess is access all Node;
    type NodeArray is array (Positive range <>) of NodeAccess;
    type NodeArrayAccess is access all NodeArray;
@@ -8,7 +10,7 @@ package Node is
    NodeAccessArray : aliased NodeArray := NodeArray'(1 .. 3 => null);
 
    task type Node (id : Integer; net : NodeArrayAccess) is
-      entry SendMessage (Msg : in String);
+      entry Send_Message (Message_Type : in MessageType; Msg : in String);
    end Node;
 
 end Node;
