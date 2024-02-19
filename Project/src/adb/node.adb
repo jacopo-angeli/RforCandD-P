@@ -169,11 +169,13 @@ package body Node is
                   --    Votes for itself
                   --    Asks for votes
                      Current_State:=CANDIDATE;
-
-
+                     Votes_Counter:=Votes_Counter+1;
+                     for i in net.all'range loop
+                        net.all(i).Send_Message(Msg => Message.Candidated'(Term => Term, Sender_Id => id));
+                     end loop;
+                     Milliseconds_From_Last_Heartbeat:= Duration(0,0,0,0);
                   end if;
                else
-               --  TODO and TBD
                end if;
             end;
 
