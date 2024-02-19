@@ -33,7 +33,11 @@ package body Node is
       --  COUNTERS
       Appended_Counter : Integer; 
       Votes_Counter : Integer;
-      
+
+      --  FLAG
+      Append_Happening : Boolean;
+      Vote_Happening: Boolean;
+
       --  TIMEOUTS
       Last_Heartbeat : Time;
 
@@ -99,7 +103,7 @@ package body Node is
                         end;
                      elsif Msg in Commit'Class then
                         -- Set last log entry as COMMITED
-                        Log.Last_Element.state := LogEntry.LogEntryState.COMMITED;
+                        Log.Last_Element.State := LogEntry.COMMITED;
                         -- Send COMMITED message to LEADER
                         net.all(Current_Leader).Send_Message(Message.Commited'(Sender_Id => id, Term => Current_Term));
                      elsif Msg in Candidated'Class then
@@ -111,20 +115,36 @@ package body Node is
 
                   when CANDIDATE =>
                      if Msg in Vote'Class then
-                        null;
+                        -- Update Votes_Counter 
+                        Votes_Counter:= Votes_Counter+1;
+                        -- Check if node has the majority of the votes and update the state if so
+                        if (Votes_Counter > Integer(net.all.'Length / 2)) then
+                           Current_State := LEADER;
+                        end if;
                      else
                         null; -- Or handle unsupported message types
                      end if;
 
                   when LEADER =>
                      if Msg in Appended'Class then
-                        --  Needs a list of received appended message
-
-                     -- Handle Appended
+                        -- Update Appended counter
+                        Appended_Counter := Appended_Counter + 1;
+                        -- Check if the majority of nodes has appended the entry, if so commit and send commit command and reset counter
+                        if (Appended_Counter > Integer(net.all.'Length / 2)) then
+                           Log.Last_Element.State := LogEntry.COMMITED;
+                           for Index in net.all'Range loop
+                              if (Index /= id) then
+                                 Node.Send_Message(Message.Commit'(Sender_Id => id, Term => Current_Term));
+                              end if;
+                           end loop;
+                           Appended_Counter := 0;
+                        end if;
                      elsif Msg in Committed'Class then
+                        null;
                      -- Handle Committed
                      elsif Msg in ClientOperation'Class then
                      -- Handle ClientOperation
+                     --  Append_Happening true
                      else
                         null; -- Or handle unsupported message types
                      end if;

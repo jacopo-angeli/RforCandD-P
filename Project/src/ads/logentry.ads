@@ -7,8 +7,8 @@ package LogEntry is
     type LogEntry is record
         Term: Integer;
         Index: Integer;
-        peyload : Payload.Payload;
-        state: LogEntryState;
+        Peyload : Payload.Payload;
+        State: LogEntryState;
     end record;
 
     function Entry_Stringify(obj: in LogEntry) return String;
