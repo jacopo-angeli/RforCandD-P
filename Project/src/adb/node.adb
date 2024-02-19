@@ -18,7 +18,7 @@ package body Node is
       --  A node can be in three states : LEADER, CANDIDATE and FOLLOWER
       --  A node is created with the FOLLOWER state
       Current_State : State := FOLLOWER;
-
+      Current_Votes : Integer;
       --  TIMEOUTS
       Last_Heartbeat : Time;
 
@@ -109,14 +109,27 @@ package body Node is
                if Current_State = LEADER then
                --  LEADER
                --  Heartbeat timeout managment
-               --   If expired
-               --    Send heartbeat to all the node
+                  if(Milliseconds_From_Last_Heartbeat > Integer'Duration(Heartbeat_Timeout_Duration)) then
+                     -- Heartbeat expired
+                     -- Send heartbeat to all the node
+                     -- Make leader counter == 0
+                     for i in net.all'range loop
+                        net.all(i).Send_Message(Msg => Message.Heartbeat'(Term => Term, Sender_Id => id));
+                     end loop;
+                     Milliseconds_From_Last_Heartbeat:= Duration(0,0,0,0);
+                  end if;
                elsif Current_State = FOLLOWER then
                -- FOLLOWER
                --  Election timeout managment
-               --    If expired
-               --     State = Candidate
-               --     Asks for votes
+                  if(Milliseconds_From_Last_Heartbeat > Integer'Duration(Election_Timeout_Duration)) then
+                  --    If expired
+                  --    State = Candidate
+                  --    Votes for itself
+                  --    Asks for votes
+                     Current_State:=CANDIDATE;
+
+
+                  end if;
                else
                --  TODO and TBD
                end if;
