@@ -22,6 +22,11 @@ package Message is
     type Appended is new Message with null record;
     function Message_Stringify (Msg : in Appended) return String;
 
+    type LogOutdated is new Message with record
+        LogEntri : LogEntry.LogEntry;
+    end record;
+    function Message_Stringify (Msg : in Appended) return String;
+
     type Candidated is new Message with null record;
     function Message_Stringify (Msg : in Candidated) return String;
 
