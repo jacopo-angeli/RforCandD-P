@@ -1,7 +1,9 @@
 with Ada.Text_IO;   use Ada.Text_IO;
 with Ada.Real_Time; use Ada.Real_Time;
 with Ada.Numerics.Discrete_Random;
+with Ada.Containers.Vectors;
 with Message;
+with LogEntry;
 
 package body Node is
 
@@ -13,11 +15,23 @@ package body Node is
       --  The term numbers are also used in the log entries. Each log entry contains the term number when the entry was received by the leader. This helps with maintaining a consistent and ordered log across all the nodes.
       --  A node won't accept a log from a leader of a previous term, which prevents inconsistencies and ensures that committed entries are not overwritten.
       --  Each term is identified by a unique, consecutive integer.
-      Term : Integer := 0;
+      Current_Term : Integer := 0;
 
       --  A node can be in three states : LEADER, CANDIDATE and FOLLOWER
       --  A node is created with the FOLLOWER state
       Current_State : State := FOLLOWER;
+       
+      --  Log
+      package LogEntry_Vector is new Ada.Containers.Vectors
+        (Index_Type   => Natural,
+         Element_Type => LogEntry.LogEntry);   
+      Log : LogEntry_Vector.Vector;
+
+      --  Leader
+      Current_Leader: Integer;
+
+      --  COUNTERS
+      Appended_Counter : Integer; 
 
       --  TIMEOUTS
       Last_Heartbeat : Time;
@@ -58,26 +72,53 @@ package body Node is
                case Current_State is
                   when FOLLOWER =>
                      if Msg in Heartbeat'Class then
-                     -- Handle Heartbeat
+                        --  Reset last heartbeat receive time
+                        if (Current_Leader == Msg.Sender_Id & Current_Term <= Msg.Term) then
+                           Last_Heartbeat := Clock;
+                           end if;
                      elsif Msg in AppendEntry'Class then
-                     -- Handle AppendEntry
+                        -- if the entry has index equal to the lenght of Log.Length + 1 
+                        --  Add it + return Appended message
+                        -- else
+                        --  return LogOutdated message
+                        declare
+                           -- Declaration 
+                           AppendEntryMessage : Message.AppendEntry;
+                        begin 
+                           -- Init
+                           AppendEntryMessage:= Message.AppendEntry(Msg);
+
+                           -- Exec
+                           if(AppendEntryMessage.LogEntri.Index = (Log.Last_Element.Index + 1)) then
+                              Log.Append(AppendEntryMessage.LogEntri);
+                              net.all(Current_Leader).Send_Message(Message.Appended'(Sender_Id => id, Term => Current_Term));
+                           else
+                              net.all(Current_Leader).Send_Message(Message.LogOutdated'(Sender_Id => id, LogEntri => AppendEntryMessage.LogEntri)); 
+                           end if;
+                        end;
                      elsif Msg in Commit'Class then
-                     -- Handle Commit
+                        -- Set last log entry as COMMITED
+                        Log.Last_Element.state := LogEntry.LogEntryState.COMMITED;
+                        -- Send COMMITED message to LEADER
+                        net.all(Current_Leader).Send_Message(Message.Commited'(Sender_Id => id, Term => Current_Term));
                      elsif Msg in Candidated'Class then
-                     -- Handle Candidated
+                        -- Send vote to Sender_Id 
+                        net.all(Msg.Sender_Id).Send_Message(Message.Vote'(Sender_Id => id));
                      else
                         null; -- Or handle unsupported message types
                      end if;
 
                   when CANDIDATE =>
                      if Msg in Vote'Class then
-                     -- Handle Vote
+                        null;
                      else
                         null; -- Or handle unsupported message types
                      end if;
 
                   when LEADER =>
                      if Msg in Appended'Class then
+                        --  Needs a list of received appended message
+
                      -- Handle Appended
                      elsif Msg in Committed'Class then
                      -- Handle Committed
