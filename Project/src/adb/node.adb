@@ -156,7 +156,7 @@ package body Node is
                      -- Send heartbeat to all the node
                      -- Make leader counter == 0
                      for i in net.all'range loop
-                        net.all(i).Send_Message(Msg => Message.Heartbeat'(Term => Term, Sender_Id => id));
+                        net.all(i).Send_Message(Msg => Message.Heartbeat'(Term => Current_Term, Sender_Id => id));
                      end loop;
                      Milliseconds_From_Last_Heartbeat:= Duration(0,0,0,0);
                   end if;
@@ -171,7 +171,7 @@ package body Node is
                      Current_State:=CANDIDATE;
                      Votes_Counter:=Votes_Counter+1;
                      for i in net.all'range loop
-                        net.all(i).Send_Message(Msg => Message.Candidated'(Term => Term, Sender_Id => id));
+                        net.all(i).Send_Message(Msg => Message.Candidated'(Term => Current_Term, Sender_Id => id));
                      end loop;
                      Milliseconds_From_Last_Heartbeat:= Duration(0,0,0,0);
                   end if;
