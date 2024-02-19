@@ -3,6 +3,7 @@ package Message is
 
     --  Interface
     type Message is abstract tagged record
+        Term      : Integer;
         Sender_Id : Integer;
     end record;
 
