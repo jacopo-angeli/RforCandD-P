@@ -32,8 +32,8 @@ package body Node is
 
       --  COUNTERS
       Appended_Counter : Integer; 
-
-      Current_Votes : Integer;
+      Votes_Counter : Integer;
+      
       --  TIMEOUTS
       Last_Heartbeat : Time;
 
