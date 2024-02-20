@@ -52,6 +52,7 @@ package body Node is
       --  RANDOM NUMBER GENERATOR
       package Integer_Random is new Ada.Numerics.Discrete_Random (Integer);
       Gen : Integer_Random.Generator;
+      
    begin
       --  INIT
       Integer_Random.Reset (Gen);
