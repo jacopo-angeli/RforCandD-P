@@ -9,16 +9,17 @@ package Message is
 
     function Message_Stringify (Msg : in Message) return String is abstract;
 
-    --  Subtypes
-    type Heartbeat is new Message with null record;
-    function Message_Stringify (Msg : in Heartbeat) return String;
-
+    -- SUBTYPES --
+    
+    
+    -- LEADER --
+    
+    type ClientOperation is new Message with null record;
+    function Message_Stringify (Msg : in ClientOperation) return String;
+    
     type Committed is new Message with null record;
     function Message_Stringify (Msg : in Committed) return String;
-
-    type Commit is new Message with null record;
-    function Message_Stringify (Msg : in Commit) return String;
-
+    
     type Appended is new Message with null record;
     function Message_Stringify (Msg : in Appended) return String;
 
@@ -26,19 +27,31 @@ package Message is
         LogEntri : LogEntry.LogEntry;
     end record;
     function Message_Stringify (Msg : in LogOutdated) return String;
-
+    
+    
+    -- FOLLOWER --
+    
     type Candidated is new Message with null record;
     function Message_Stringify (Msg : in Candidated) return String;
 
-    type Vote is new Message with null record;
-    function Message_Stringify (Msg : in Vote) return String;
-
+    type Commit is new Message with null record;
+    function Message_Stringify (Msg : in Commit) return String;
+    
     type AppendEntry is new Message with record
         LogEntri : LogEntry.LogEntry;
     end record;
     function Message_Stringify (Msg : in AppendEntry) return String;
+    
 
-    type ClientOperation is new Message with null record;
-    function Message_Stringify (Msg : in ClientOperation) return String;
+    -- CANDIDATE --
+
+    type Vote is new Message with null record;
+    function Message_Stringify (Msg : in Vote) return String;
+
+
+    -- COMMON --
+    
+    type Heartbeat is new Message with null record;
+    function Message_Stringify (Msg : in Heartbeat) return String;
 
 end Message;
