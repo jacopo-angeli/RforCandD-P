@@ -27,10 +27,12 @@ package body Node is
       Vote_Happening   : Boolean;
 
       Last_Heartbeat : aliased Time := Clock;
+      CUrrent_Time   :  Time := Clock;
 
       Election_Timeout_Duration : Integer;
 
       Heartbeat_Timeout_Duration : Integer;
+      Milliseconds_From_Last_Heartbeat : Duration;
 
       package Integer_Random is new Ada.Numerics.Discrete_Random (Integer);
       Gen : Integer_Random.Generator;
@@ -40,8 +42,11 @@ package body Node is
       Integer_Random.Reset (Gen);
       Election_Timeout_Duration := Integer_Random.Random (Gen) mod 151 + 1_500;
       Heartbeat_Timeout_Duration := Integer_Random.Random (Gen) mod 101 + 500;
+      Milliseconds_From_Last_Heartbeat :=
+            To_Duration (Current_Time - Last_Heartbeat) * 1_000;
       if Id = 1 then
          Broadcast (Id, Net, Message.Heartbeat'(Sender_Id => Id, Term => Id));
+         Current_State:=LEADER;
       end if;
 
       loop
@@ -52,6 +57,35 @@ package body Node is
             Start_Time, End_Time : Time;
             Milliseconds         : Integer := 0;
          begin
+         --Managment Last_Heartbeat using milliseconds
+         if(Current_State = LEADER) then
+            if(Integer (Milliseconds_From_Last_Heartbeat) >
+               Heartbeat_Timeout_Duration + Milliseconds)
+               then
+               -- Heartbeat expired
+               -- Send heartbeat to all the nodes
+               -- Make Last_Heartbeat = 0
+               Broadcast (Id, Net, Message.Heartbeat'(Sender_Id => Id, Term => Current_Term));
+               Last_Heartbeat := Clock;
+            end if;
+         end if;
+         --Follower election timeout managment 
+         if(Current_State = FOLLOWER) then 
+            if(Integer (Milliseconds_From_Last_Heartbeat) >
+               Election_Timeout_Duration + Milliseconds)
+               then
+               -- Election timeout expired
+               -- Set state to CANDIDATE
+               -- Update votes counter
+               -- Send candidation to all the nodes
+               -- Make Last_Heartbeat = 0
+               Current_State:=CANDIDATE;
+               Votes_Counter:=Votes_Counter+1;
+               Broadcast (Id, Net, Message.Candidated'(Sender_Id => Id, Term => Current_Term));
+               Last_Heartbeat := Clock;
+            end if;
+         end if;
+
             if not Queue.Is_Empty (net.all (id).all) then
                Start_Time := Clock;
 
@@ -59,15 +93,11 @@ package body Node is
                  (Net, Id, Queue.Dequeue (net.all (Id).all),
                   Last_Heartbeat'Access, Current_Leader'Access,
                   Current_Term'Access, Current_State'Access);
-
                End_Time := Clock;
-
                Milliseconds :=
                  Integer (To_Duration (End_Time - Start_Time)) * 1_000;
-
-               -- Managment Last_Heartbeat Usare Millisecond
-
             end if;
+   
          end;
          delay 1.0;
       end loop;
