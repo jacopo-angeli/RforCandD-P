@@ -58,14 +58,7 @@ package body Node is
       Election_Timeout_Duration := Integer_Random.Random (Gen) mod 151 + 1_500;
       Heartbeat_Timeout_Duration := Integer_Random.Random (Gen) mod 101 + 500;
 
-      for I in net.all.First_Index .. net.all.Last_Index loop
-         if I /= id then
-            Queue.Enqueue
-              (net.all (I).all,
-               Message.Heartbeat'(Sender_Id => id, Term => id));
-         end if;
-      end loop;
-
+      Broadcast (Id, Net, Message.Heartbeat'(Sender_Id => Id, Term => Id));
       delay 2.0;
       loop
          --  Managment dei messaggi nella queue
@@ -73,10 +66,32 @@ package body Node is
          --  Inserisco messaggi su altri nodi della rete
          Put_Line
            ("Node(" & Integer'Image (id) & " ) running with" &
-            Ada.Containers.Count_Type'Image (Queue.Lenght (net.all (id).all)) &
+            Ada.Containers.Count_Type'Image (Queue.Length (net.all (id).all)) &
             " messages;");
          delay 1.0;
       end loop;
    end Node;
+
+   procedure Broadcast
+     (Id  : Integer; Net : access QueueVector.Vector;
+      Msg : Message.Message'Class)
+   is
+   begin
+      for I in Net.all.First_Index .. Net.all.Last_Index loop
+         if I /= Id then
+            Queue.Enqueue
+              (net.all (I).all,
+               Message.Heartbeat'(Sender_Id => id, Term => id));
+         end if;
+      end loop;
+   end Broadcast;
+
+   procedure SendToLeader
+     (Current_Leader  : Integer; Net : access QueueVector.Vector;
+      Msg : Message.Message'Class)
+   is
+   begin
+      Put_Line ("Boiadioasidoki");
+   end SendToLeader;
 
 end Node;

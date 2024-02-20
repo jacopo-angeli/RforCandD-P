@@ -14,8 +14,13 @@ package Node is
 
    QVector : aliased QueueVector.Vector := QueueVector.Empty_Vector;
 
-   task type Node (id : Integer; net : access QueueVector.Vector) is
+   task type Node (Id : Integer; Net : access QueueVector.Vector) is
       entry Send_Message (Msg : in Message.Message'Class);
    end Node;
+
+   procedure Broadcast
+     (Id: Integer;Net : access QueueVector.Vector; Msg : Message.Message'Class);
+   procedure SendToLeader
+     (Current_Leader: Integer; Net : access QueueVector.Vector; Msg : Message.Message'Class);
 
 end Node;
