@@ -1,17 +1,21 @@
 with Message;
+with Queue;
+with Ada.Containers.Vectors;
 package Node is
-
    type State is (LEADER, CANDIDATE, FOLLOWER);
-   
+
+   --  Node and access Node
    type Node;
    type NodeAccess is access all Node;
-   type NodeArray is array (Positive range <>) of NodeAccess;
-   type NodeArrayAccess is access all NodeArray;
 
-   NodeAccessArray : aliased NodeArray := NodeArray'(1 .. 3 => null);
+   type QueueAccess is access all Queue.Queue;
+   package QueueVector is new Ada.Containers.Vectors
+     (Index_Type => Positive, Element_Type => QueueAccess);
 
-   task type Node (id : Integer; net : NodeArrayAccess) is
-      entry Send_Message (Msg: in Message.Message'Class);
+   QVector : aliased QueueVector.Vector := QueueVector.Empty_Vector;
+
+   task type Node (id : Integer; net : access QueueVector.Vector) is
+      entry Send_Message (Msg : in Message.Message'Class);
    end Node;
 
 end Node;

@@ -8,9 +8,9 @@ package body Message is
         return "Messaggio Heartbeat";
     end Message_Stringify;
 
-    function Message_Stringify (Msg : in Commited) return String is
+    function Message_Stringify (Msg : in Committed) return String is
     begin
-        return "Messaggio Commited";
+        return "Messaggio Committed";
     end Message_Stringify;
 
     function Message_Stringify (Msg : in Commit) return String is
@@ -21,6 +21,11 @@ package body Message is
     function Message_Stringify (Msg : in Appended) return String is
     begin
         return "Messaggio Appended";
+    end Message_Stringify;
+
+    function Message_Stringify (Msg : in LogOutdated) return String is
+    begin
+        return "Messaggio LogOutdated";
     end Message_Stringify;
 
     function Message_Stringify (Msg : in Candidated) return String is
@@ -35,7 +40,13 @@ package body Message is
 
     function Message_Stringify (Msg : in AppendEntry) return String is
     begin
-        return "Messaggio AppendEntry con entry:" & Entry_Stringify (Msg.LogEntri);
+        return
+           "Messaggio AppendEntry con entry:" & Entry_Stringify (Msg.LogEntri);
+    end Message_Stringify;
+
+    function Message_Stringify (Msg : in ClientOperation) return String is
+    begin
+        return "Messaggio ClientOperation";
     end Message_Stringify;
 
 end Message;

@@ -1,21 +1,24 @@
 with Ada.Text_IO; use Ada.Text_IO;
+with Queue;
+with Message;
 with Node;
 
 procedure Main is
-   -- Declare variables to hold references to the nodes
-   Node1 : Node.NodeAccess;
-   Node2 : Node.NodeAccess;
-   Node3 : Node.NodeAccess;
+   Q1 : Node.QueueAccess := new Queue.Queue;
+   Q2 : Node.QueueAccess := new Queue.Queue;
+   Q3 : Node.QueueAccess := new Queue.Queue;
+   Q4 : Node.QueueAccess := new Queue.Queue;
+
+   N1, N2, N3, N4: Node.NodeAccess;
 begin
-   -- Create instances of the Node task
-   Node1 := new Node.Node (1, Node.NodeAccessArray'Access);
-   Node2 := new Node.Node (2, Node.NodeAccessArray'Access);
-   Node3 := new Node.Node (3, Node.NodeAccessArray'Access);
+   Node.QueueVector.Append (Node.QVector, Q1);
+   Node.QueueVector.Append (Node.QVector, Q2);
+   Node.QueueVector.Append (Node.QVector, Q3);
+   Node.QueueVector.Append (Node.QVector, Q4);
 
-   -- Store references to the nodes in the array
-   Node.NodeAccessArray (1) := Node1;
-   Node.NodeAccessArray (2) := Node2;
-   Node.NodeAccessArray (3) := Node3;
+   N1 := new Node.Node (1, Node.QVector'Access);
+   N2 := new Node.Node (2, Node.QVector'Access);
+   N3 := new Node.Node (3, Node.QVector'Access);
+   N4 := new Node.Node (4, Node.QVector'Access);
 
-   Put_Line ("Nodes created successfully.");
 end Main;

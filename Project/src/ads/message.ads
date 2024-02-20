@@ -13,8 +13,8 @@ package Message is
     type Heartbeat is new Message with null record;
     function Message_Stringify (Msg : in Heartbeat) return String;
 
-    type Commited is new Message with null record;
-    function Message_Stringify (Msg : in Commited) return String;
+    type Committed is new Message with null record;
+    function Message_Stringify (Msg : in Committed) return String;
 
     type Commit is new Message with null record;
     function Message_Stringify (Msg : in Commit) return String;
@@ -25,7 +25,7 @@ package Message is
     type LogOutdated is new Message with record
         LogEntri : LogEntry.LogEntry;
     end record;
-    function Message_Stringify (Msg : in Appended) return String;
+    function Message_Stringify (Msg : in LogOutdated) return String;
 
     type Candidated is new Message with null record;
     function Message_Stringify (Msg : in Candidated) return String;
@@ -37,5 +37,8 @@ package Message is
         LogEntri : LogEntry.LogEntry;
     end record;
     function Message_Stringify (Msg : in AppendEntry) return String;
+
+    type ClientOperation is new Message with null record;
+    function Message_Stringify (Msg : in ClientOperation) return String;
 
 end Message;

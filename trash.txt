@@ -1,0 +1,189 @@
+-- SERVER LOOP
+      --  loop
+      --     Put_Line
+      --       ("Node(" & Integer'Image (id) & " ) { Current_Leader:" &
+      --        Integer'Image (Current_Leader) & ", Current_State: " & State'Image(Current_State) &"}");
+      --     select
+      --        --  Strucutre of the send_message procedure
+      --        -- FOLLOWER
+      --        --  Heartbeat
+      --        --  AppendEntry
+      --        --  Commit
+      --        --  Candidated
+      --        -- CANDIDATE
+      --        --  Vote
+      --        -- LEADER
+      --        --  Appendend
+      --        --  Commited
+      --        --  ClientOperation
+      --        accept Send_Message (Msg : in Message.Message'Class) do
+      --           Put_Line
+      --             ("Node(" & Integer'Image (id) & " ) received : " &
+      --              Message_Stringify (Msg) & ".");
+      --           case Current_State is
+      --              when FOLLOWER =>
+      --                 if Msg in Heartbeat'Class then
+      --                    --  Reset last heartbeat receive time
+      --                    if Current_Leader > -1 then
+      --                       if
+      --                         (Current_Leader = Msg.Sender_Id and
+      --                          Current_Term <= Msg.Term)
+      --                       then
+      --                          Last_Heartbeat := Clock;
+      --                       end if;
+      --                    else
+      --                       Last_Heartbeat := Clock;
+      --                       Current_Leader := Msg.Sender_Id;
+      --                    end if;
+      --                 elsif Msg in AppendEntry'Class then
+      --                    -- if the entry has index equal to the lenght of Log.Length + 1
+      --                    --  Add it + return Appended message
+      --                    -- else
+      --                    --  return LogOutdated message
+      --                    declare
+      --                       -- Declaration
+      --                       AppendEntryMessage : AppendEntry;
+      --                    begin
+      --                       -- Init
+      --                       AppendEntryMessage := AppendEntry (Msg);
+
+      --                       -- Exec
+      --                       if
+      --                         (AppendEntryMessage.LogEntri.Index =
+      --                          (Log.Last_Element.Index + 1))
+      --                       then
+      --                          Log.Append (AppendEntryMessage.LogEntri);
+      --                          net.all (Current_Leader).Send_Message
+      --                            (Appended'
+      --                               (Sender_Id => id, Term => Current_Term));
+      --                       else
+      --                          net.all (Current_Leader).Send_Message
+      --                            (LogOutdated'
+      --                               (Sender_Id => id,
+      --                                LogEntri  => AppendEntryMessage.LogEntri,
+      --                                Term      => Current_Term));
+      --                       end if;
+      --                    end;
+
+      --                 elsif Msg in Commit'Class then
+      --                    -- Set last log entry as COMMITED
+      --                    Log (Log.Last_Index).State := LogEntry.COMMITED;
+      --                    -- Send COMMITED message to LEADER
+      --                    net.all (Current_Leader).Send_Message
+      --                      (Committed'(Sender_Id => id, Term => Current_Term));
+
+      --                 elsif Msg in Candidated'Class then
+      --                    -- Send vote to Sender_Id
+      --                    Put_Line (Integer'Image(Msg.Sender_Id) & Integer'Image(net.all(Msg.Sender_Id).id));
+      --                    --  net.all (Msg.Sender_Id).Send_Message
+      --                    --    (Vote'(Sender_Id => id, Term => Current_Term));
+      --                    Put_Line ("Voted for Node (" & Integer'Image (Msg.Sender_Id) & " )");
+      --                 else
+      --                    null; -- Or handle unsupported message types
+      --                 end if;
+
+      --              when CANDIDATE =>
+      --                 if Msg in Vote'Class then
+      --                    -- Update Votes_Counter
+      --                    Votes_Counter := Votes_Counter + 1;
+      --                    -- Check if node has the majority of the votes and update the state if so
+      --                    if (Votes_Counter > Integer (net.all'Length / 2)) then
+      --                       Current_State := LEADER;
+      --                    end if;
+      --                 else
+      --                    null; -- Or handle unsupported message types
+      --                 end if;
+
+      --              when LEADER =>
+      --                 if Msg in Appended'Class then
+      --                    -- Update Appended counter
+      --                    Appended_Counter := Appended_Counter + 1;
+      --                    -- Check if the majority of nodes has appended the entry, if so commit and send commit command and reset counter
+      --                    if (Appended_Counter > Integer (net.all'Length / 2))
+      --                    then
+      --                       Log (Log.Last_Index).State := LogEntry.COMMITED;
+      --                       for Index in net.all'Range loop
+      --                          if (Index /= id) then
+      --                             Node.Send_Message
+      --                               (Commit'
+      --                                  (Sender_Id => id, Term => Current_Term));
+      --                          end if;
+      --                       end loop;
+      --                       Appended_Counter := 0;
+      --                    end if;
+      --                 elsif Msg in Committed'Class then
+      --                    null;
+      --                    -- Handle Committed
+      --                 elsif Msg in ClientOperation'Class then
+      --                    -- Handle ClientOperation
+      --                    --  Append_Happening true
+      --                    null;
+      --                 else
+      --                    null; -- Or handle unsupported message types
+      --                 end if;
+      --           end case;
+      --           null;
+      --        end Send_Message;
+      --     or
+      --        delay 0.1;
+            
+      --     end select;
+
+      --     --  TODO : Check when this has to happen, now or before accepting messages ?
+      --     declare
+      --        --  DECLARATION
+      --        Current_Time                     : Time;
+      --        Milliseconds_From_Last_Heartbeat : Duration;
+      --     begin
+      --        --  INIT
+      --        Current_Time                     := Clock;
+      --        Milliseconds_From_Last_Heartbeat :=
+      --          To_Duration (Current_Time - Last_Heartbeat) * 1_000;
+
+      --        --  RUN
+      --        if Current_State = LEADER then
+      --           --  LEADER
+      --           --  Heartbeat timeout managment
+      --           if
+      --             (Integer (Milliseconds_From_Last_Heartbeat) >
+      --              Heartbeat_Timeout_Duration)
+      --           then
+      --              -- Heartbeat expired
+      --              -- Send heartbeat to all the node
+      --              -- Make leader counter == 0
+      --              for i in net.all'Range loop
+      --                 net.all (i).Send_Message
+      --                   (Msg =>
+      --                      Heartbeat'(Term => Current_Term, Sender_Id => id));
+      --              end loop;
+      --              Last_Heartbeat := Clock;
+      --           end if;
+            
+      --        elsif Current_State = FOLLOWER then
+      --           -- FOLLOWER
+      --           --  Election timeout managment
+
+      --           if
+      --             (Integer (Milliseconds_From_Last_Heartbeat) >
+      --              Election_Timeout_Duration)
+      --           then
+      --              --    If expired
+      --              --    State = Candidate
+      --              --    Votes for itself
+      --              --    Asks for votes
+      --              Current_State := CANDIDATE;
+      --              Put_Line
+      --                ("Into FOLLOWER");
+      --              Votes_Counter := Votes_Counter + 1;
+      --              for i in net.all'Range loop
+      --                 if (i /= id) then
+      --                    net.all (i).Send_Message
+      --                      (Msg =>
+      --                         Candidated'
+      --                           (Term => Current_Term, Sender_Id => id));
+      --                 end if;
+      --              end loop;
+      --              Last_Heartbeat := Clock;
+      --           end if;
+      --        end if;
+      --     end;
