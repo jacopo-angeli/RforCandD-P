@@ -11,7 +11,6 @@ package Message is
 
     -- SUBTYPES --
     
-    
     -- LEADER --
     
     type ClientOperation is new Message with null record;
