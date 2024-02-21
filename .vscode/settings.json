@@ -1,3 +1,4 @@
 {
-    "ada.projectFile": "Project/raftimpl.gpr"
+    "ada.projectFile": "Project/raftimpl.gpr",
+    "ada.rootDir": "./Project"
 }
