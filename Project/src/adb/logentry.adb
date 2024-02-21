@@ -17,9 +17,4 @@ package body LogEntry is
         begin
             obj.State:=state;
         end Set_State;
-
-    function Get_State (obj : in out LogEntry) return LogEntryState is
-        begin
-            return obj.State;
-        end Get_State;
 end LogEntry;

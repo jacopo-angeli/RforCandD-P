@@ -22,14 +22,11 @@ package body Node is
 
       Current_State : aliased State := FOLLOWER;
 
-      Log         : aliased LogEntryVector.Vector;
+      Log : aliased LogEntryVector.Vector;
 
       Current_Leader   : aliased Integer := -1;
       Appended_Counter : Integer         := 0;
       Votes_Counter    : Integer         := 0;
-
-      Append_Happening : Boolean;
-      Vote_Happening   : Boolean;
 
       Last_Heartbeat : aliased Time := Clock;
       CUrrent_Time   : Time         := Clock;
@@ -53,7 +50,7 @@ package body Node is
            (Id, Net,
             Message.Heartbeat'
               (Sender_Id  => Id, Term => Current_Term,
-               Log_length => Integer(Log.Length)));
+               Log_length => Integer (Log.Length)));
          Current_State := LEADER;
       end if;
 
@@ -82,7 +79,7 @@ package body Node is
                     (Id, Net,
                      Message.Heartbeat'
                        (Sender_Id  => Id, Term => Current_Term,
-                        Log_length => Integer(Log.Length)));
+                        Log_length => Integer (Log.Length)));
                   Last_Heartbeat := Clock;
                end if;
             end if;
@@ -105,7 +102,7 @@ package body Node is
                     (Id, Net,
                      Message.Candidated'
                        (Sender_Id  => Id, Term => Current_Term,
-                        Log_length => Integer(Log.Length)));
+                        Log_length => Integer (Log.Length)));
                   Last_Heartbeat := Clock;
                end if;
             end if;
@@ -157,13 +154,13 @@ package body Node is
    end SendToId;
 
    procedure HandleMessage
-        (Net            : access QueueVector.Vector; Id : Integer;
-         Msg            : Message.Message'Class; Last_Heartbeat : access Time;
-         Current_Leader : access Integer; Current_Term : access Integer;
-         Current_State  : access State; Log : LogEntryVector.Vector)
-      is
-         Log_Length : Integer := Integer(Log.Length);
-      begin
+     (Net            : access QueueVector.Vector; Id : Integer;
+      Msg            : Message.Message'Class; Last_Heartbeat : access Time;
+      Current_Leader : access Integer; Current_Term : access Integer;
+      Current_State  : access State; Log : LogEntryVector.Vector)
+   is
+      Log_Length : Integer := Integer (Log.Length);
+   begin
       case Current_State.all is
          when FOLLOWER =>
             if Msg in Heartbeat'Class then
@@ -171,40 +168,45 @@ package body Node is
                Current_Leader.all := Msg.Sender_Id;
                --Broadcast (Id, Net, Commit'(Sender_Id => Id, Term => 12_837, Log_length => Log_Length));
 
-               elsif Msg in Candidated'Class then
-                  --Election handling
-                  if Log_Length < Msg.Log_length then
-                     --node has to vote for that candidate
-                     SendToId
-                       (Net,
-                        Message.Vote'(Current_Term.all, Id, Log_Length),
-                        Msg.Sender_Id);
-                  end if;
             elsif Msg in Candidated'Class then
                --Election handling
-               if Log_Length<Msg.Log_length then 
+               if Log_Length < Msg.Log_length then
                   --node has to vote for that candidate
-                  SendToId(Net, Message.Vote'(Current_Term.all, Id, Log_Length), Msg.Sender_Id);                  
+                  SendToId
+                    (Net, Message.Vote'(Current_Term.all, Id, Log_Length),
+                     Msg.Sender_Id);
+               end if;
+            elsif Msg in Candidated'Class then
+               --Election handling
+               if Log_Length < Msg.Log_length then
+                  --node has to vote for that candidate
+                  SendToId
+                    (Net, Message.Vote'(Current_Term.all, Id, Log_Length),
+                     Msg.Sender_Id);
                end if;
 
-               elsif Msg in Commit'Class then
-                  -- the node has to commit that Log entry (i.e change the entry state in COMMITED)
+            elsif Msg in Commit'Class then
+               -- the node has to commit that Log entry (i.e change the entry state in COMMITED)
 
-                  for I in Log.First_Index .. Log.Last_Index loop
-                     if Log(I).State = LogEntry.APPENDED then
-                        Log(I).State := LogEntry.COMMITTED;
-                     end if;
-                  end loop;
+               for I in Log.First_Index .. Log.Last_Index loop
+                  if Log (I).State = LogEntry.APPENDED then
+                     declare
+                        Element : LogEntry.LogEntry := Log (I);
+                     begin
+                        Set_State (Element,  LogEntry.COMMITTED);
+                     end;
+                  end if;
+               end loop;
 
-               elsif Msg in AppendEntry'Class then
-                  -- check the validity of the append operation on the Log
-                  null;
-               end if;
-            when CANDIDATE =>
+            elsif Msg in AppendEntry'Class then
+               -- check the validity of the append operation on the Log
                null;
-            when LEADER =>
-               null;
-         end case;
-      end HandleMessage;
+            end if;
+         when CANDIDATE =>
+            null;
+         when LEADER =>
+            null;
+      end case;
+   end HandleMessage;
 
 end Node;
