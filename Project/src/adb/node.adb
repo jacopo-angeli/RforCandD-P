@@ -169,6 +169,21 @@ package body Node is
                if Msg in Heartbeat'Class then
                   Last_Heartbeat.all := Clock;
                   Current_Leader.all := Msg.Sender_Id;
+     (Net            : access QueueVector.Vector; Id : Integer;
+      Msg            : Message.Message'Class; Last_Heartbeat : access Time;
+      Current_Leader : access Integer; Current_Term : access Integer;
+      Current_State  : access State;
+      Log            : LogAccess)
+
+   is
+   Log_Length : aliased Ada.Containers.Count_Type := Log.all.Length;
+   begin
+      case Current_State.all is
+         when FOLLOWER =>
+            if Msg in Heartbeat'Class then
+               Last_Heartbeat.all := Clock;
+               Current_Leader.all := Msg.Sender_Id;
+               --Broadcast (Id, Net, Commit'(Sender_Id => Id, Term => 12_837, Log_length => Log_Length));
 
                elsif Msg in Candidated'Class then
                   --Election handling
@@ -179,6 +194,12 @@ package body Node is
                         Message.Vote'(Current_Term.all, Id, Log_Length),
                         Msg.Sender_Id);
                   end if;
+            elsif Msg in Candidated'Class then
+               --Election handling
+               if Log_Length<Msg.Log_length then 
+                  --node has to vote for that candidate
+                  SendToId(Net, Message.Vote'(Current_Term.all, Id, Log_Length), Msg.Sender_Id);                  
+               end if;
 
                elsif Msg in Commit'Class then
                   -- the node has to commit that Log entry (i.e change the entry state in COMMITED)
