@@ -20,6 +20,7 @@ package Node is
   package LogEntryVector is new Ada.Containers.Vectors
    (Index_Type => Natural, Element_Type => LogEntry.LogEntry,
     "="        => LogEntry."=");
+    type LogAccess is access all LogEntryVector.Vector;
 
   -- More on Node task type
   task type Node (Id : Integer; Net : access QueueVector.Vector);
@@ -29,24 +30,25 @@ package Node is
 private
 
   --  Handle message
-  procedure HandleMessage
-   (Net : access QueueVector.Vector; Id : Integer; Msg : Message.Message'Class;
-    Last_Heartbeat : access Time; Current_Leader : access Integer;
-    Current_Term   : access Integer; Current_State : access State;
-    Current_Log : access Integer);
+    procedure HandleMessage
+     (Net            : access QueueVector.Vector; Id : Integer;
+      Msg            : Message.Message'Class; Last_Heartbeat : access Time;
+      Current_Leader : access Integer; Current_Term : access Integer;
+      Current_State  : access State;
+      log            : LogAccess);
 
   --  Send message to all the other node of the network
-  procedure Broadcast
-   (Id  : Integer; Net : access QueueVector.Vector;
-    Msg : Message.Message'Class);
-
+    procedure Broadcast
+     (Id  : Integer; Net : access QueueVector.Vector;
+      Msg : Message.Message'Class);
   --  Send message to current leader
   procedure SendToLeader
    (Current_Leader : Integer; Net : access QueueVector.Vector;
     Msg            : Message.Message'Class);
   procedure SendToId
+  --  Send a message to a specific node using its Id
      (Net : access QueueVector.Vector;
       Msg : Message.Message'Class;
-      Reciever : access Integer);
+      Reciever :  Integer);
 
 end Node;

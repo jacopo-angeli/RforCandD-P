@@ -21,11 +21,10 @@ package body Node is
 
       Current_State : aliased State := FOLLOWER;
 
-      Log : LogEntryVector.Vector;
+      Log : aliased LogEntryVector.Vector;
+      Log_Pointer : LogAccess:=Log'Access;
 
       Current_Leader : aliased Integer := -1;
-      Current_Log : aliased Integer := Log.Length;
-
       Appended_Counter : Integer := 0;
       Votes_Counter    : Integer := 0;
 
@@ -50,7 +49,7 @@ package body Node is
       Milliseconds_From_Last_Heartbeat :=
         To_Duration (CUrrent_Time - Last_Heartbeat) * 1_000;
       if Id = 1 then
-         Broadcast (Id, Net, Message.Heartbeat'(Sender_Id => Id, Term => Current_Term, log.Length));
+         Broadcast (Id, Net, Message.Heartbeat'(Sender_Id => Id, Term => Current_Term, Log_length => Log.Length));
          Current_State:=LEADER;
       end if;
 
@@ -75,7 +74,7 @@ package body Node is
                -- Heartbeat expired
                -- Send heartbeat to all the nodes
                -- Make Last_Heartbeat = 0
-               Broadcast (Id, Net, Message.Heartbeat'(Sender_Id => Id, Term => Current_Term, log.Length));
+               Broadcast (Id, Net, Message.Heartbeat'(Sender_Id => Id, Term => Current_Term, Log_length=> Log.Length));
                Last_Heartbeat := Clock;
             end if;
          end if;
@@ -93,7 +92,7 @@ package body Node is
                Current_State:=CANDIDATE;
                Current_Term:=Current_Term+1;
                Votes_Counter:=Votes_Counter+1;
-               Broadcast (Id, Net, Message.Candidated'(Sender_Id => Id, Term => Current_Term, log.Length));
+               Broadcast (Id, Net, Message.Candidated'(Sender_Id => Id, Term => Current_Term, Log_length=> Log.Length));
                Last_Heartbeat := Clock;
             end if;
          end if;
@@ -104,7 +103,7 @@ package body Node is
                HandleMessage
                  (Net, Id, Queue.Dequeue (net.all (Id).all),
                   Last_Heartbeat'Access, Current_Leader'Access,
-                  Current_Term'Access, Current_State'Access, Current_Log'Access);
+                  Current_Term'Access, Current_State'Access, Log_Pointer);
                End_Time := Clock;
                Milliseconds :=
                  Integer (To_Duration (End_Time - Start_Time)) * 1_000;
@@ -134,10 +133,11 @@ package body Node is
    begin
       Put_Line ("Boiadioasidoki");
    end SendToLeader;
+
    procedure SendToId
       (Net : access QueueVector.Vector;
       Msg : Message.Message'Class;
-      Reciever : Integer) is
+      Reciever :  Integer) is
    begin
             Queue.Enqueue (net.all(Reciever).all, Msg);
      
@@ -147,29 +147,36 @@ package body Node is
       Msg            : Message.Message'Class; Last_Heartbeat : access Time;
       Current_Leader : access Integer; Current_Term : access Integer;
       Current_State  : access State;
-      Current_Logl : access Integer)
+      Log            : LogAccess)
 
    is
+   Log_Length : aliased Ada.Containers.Count_Type := Log.all.Length;
    begin
       case Current_State.all is
          when FOLLOWER =>
             if Msg in Heartbeat'Class then
                Last_Heartbeat.all := Clock;
                Current_Leader.all := Msg.Sender_Id;
-               Broadcast (Id, Net, Commit'(Sender_Id => Id, Term => 12_837));
+               Broadcast (Id, Net, Commit'(Sender_Id => Id, Term => 12_837, Log_length => Log_Length));
+
             elsif Msg in Candidated'Class then
                --Election handling
                if Current_Logl.all<Msg.Log_length then 
                   --node has to vote for that candidate
                   SendToId(Net, Message.Vote'(Current_Term.all, Id, Current_Logl.all), Msg.Sender_Id);                  
                end if;
+
             elsif Msg in Commit'Class then
-               -- check the validity of the append operation on the log 
-               -- the node has to commit that log entry (i.e change the entry state in COMMITED)
+               -- the node has to commit that Log entry (i.e change the entry state in COMMITED)
                
-               
-               null;
+               for I in Log.all.First_Index .. Log.all.Last_Index loop
+                  if Log.all(I).State=APPENDEDD then 
+                     Log.all(I).State:=COMMITED;
+                  end if;
+               end loop;
+
             elsif Msg in AppendEntry'Class then 
+               -- check the validity of the append operation on the Log 
                null;
             end if;
          when CANDIDATE =>
