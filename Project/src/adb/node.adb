@@ -157,13 +157,13 @@ package body Node is
             if Msg in Heartbeat'Class then
                Last_Heartbeat.all := Clock;
                Current_Leader.all := Msg.Sender_Id;
-               Broadcast (Id, Net, Commit'(Sender_Id => Id, Term => 12_837, Log_length => Log_Length));
+               --Broadcast (Id, Net, Commit'(Sender_Id => Id, Term => 12_837, Log_length => Log_Length));
 
             elsif Msg in Candidated'Class then
                --Election handling
-               if Current_Logl.all<Msg.Log_length then 
+               if Log_Length<Msg.Log_length then 
                   --node has to vote for that candidate
-                  SendToId(Net, Message.Vote'(Current_Term.all, Id, Current_Logl.all), Msg.Sender_Id);                  
+                  SendToId(Net, Message.Vote'(Current_Term.all, Id, Log_Length), Msg.Sender_Id);                  
                end if;
 
             elsif Msg in Commit'Class then
