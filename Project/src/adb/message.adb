@@ -15,7 +15,7 @@ package body Message is
 
     function Message_Stringify (Msg : in Commit) return String is
     begin
-        return "Messaggio Commit";
+        return "Messaggio Commit per entry:" & Entry_Stringify (Msg.LogEntri);
     end Message_Stringify;
 
     function Message_Stringify (Msg : in Appended) return String is

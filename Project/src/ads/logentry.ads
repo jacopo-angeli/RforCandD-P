@@ -8,7 +8,7 @@ package LogEntry is
         Term    : Integer;
         Index   : Integer;
         Peyload : Payload.Payload;
-        State   : LogEntryState;
+        State   : LogEntryState := APPENDED;
     end record;
 
     function Entry_Stringify (obj : in LogEntry) return String;

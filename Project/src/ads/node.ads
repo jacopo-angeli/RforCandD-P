@@ -25,12 +25,17 @@ private
    (Net            : access QueueVector.Vector; Id : Integer;
     Msg : Message.Message'Class; Last_Heartbeat : access Time;
     Current_Leader : access Integer; Current_Term : access Integer;
-    Current_State  : access State);
+    Current_State  : access State;
+    Current_Log : access Integer);
   procedure Broadcast
    (Id  : Integer; Net : access QueueVector.Vector;
     Msg : Message.Message'Class);
   procedure SendToLeader
    (Current_Leader : Integer; Net : access QueueVector.Vector;
     Msg            : Message.Message'Class);
+  procedure SendToId
+     (Net : access QueueVector.Vector;
+      Msg : Message.Message'Class;
+      Reciever : access Integer);
 
 end Node;

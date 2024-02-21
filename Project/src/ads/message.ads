@@ -3,8 +3,9 @@ package Message is
 
     --  Interface
     type Message is abstract tagged record
-        Term      : Integer;
-        Sender_Id : Integer;
+        Term        : Integer;
+        Sender_Id   : Integer;
+        Log_length  : Integer;
     end record;
 
     function Message_Stringify (Msg : in Message) return String is abstract;
@@ -33,7 +34,9 @@ package Message is
     type Candidated is new Message with null record;
     function Message_Stringify (Msg : in Candidated) return String;
 
-    type Commit is new Message with null record;
+    type Commit is new Message with record
+        LogEntri : LogEntry.LogEntry;
+    end record;
     function Message_Stringify (Msg : in Commit) return String;
     
     type AppendEntry is new Message with record
