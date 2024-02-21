@@ -161,7 +161,7 @@ package body Node is
                --Election handling
                if Current_Logl.all<Msg.Log_length then 
                   --node has to vote for that candidate
-                  SendToId(Net, Message.Vote'(Current_Term, Id, Current_Logl), Msg.Sender_Id);                  
+                  SendToId(Net, Message.Vote'(Current_Term.all, Id, Current_Logl.all), Msg.Sender_Id);                  
                end if;
             elsif Msg in Commit'Class then
                -- check the validity of the append operation on the log 
