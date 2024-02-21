@@ -26,7 +26,7 @@ package body Node is
 
       Current_Leader   : aliased Integer := -1;
       Appended_Counter : Integer         := 0;
-      Votes_Counter    : Integer         := 0;
+      Votes_Counter    : Integer := 0;
 
       Last_Heartbeat : aliased Time := Clock;
       CUrrent_Time   : Time         := Clock;
@@ -113,7 +113,7 @@ package body Node is
                HandleMessage
                  (Net, Id, Queue.Dequeue (net.all (Id).all),
                   Last_Heartbeat'Access, Current_Leader'Access,
-                  Current_Term'Access, Current_State'Access, Log);
+                  Current_Term'Access, Current_State'Access, Log, Votes_Counter);
                End_Time     := Clock;
                Milliseconds :=
                  Integer (To_Duration (End_Time - Start_Time)) * 1_000;
@@ -157,9 +157,11 @@ package body Node is
      (Net            : access QueueVector.Vector; Id : Integer;
       Msg            : Message.Message'Class; Last_Heartbeat : access Time;
       Current_Leader : access Integer; Current_Term : access Integer;
-      Current_State  : access State; Log : LogEntryVector.Vector)
+      Current_State  : access State; Log : LogEntryVector.Vector;
+      Votes_Counter :   in out Integer)
    is
-      Log_Length : Integer := Integer (Log.Length);
+      Log_Length : Integer := Integer (Log.Length);   
+      Nodes_number : Integer:= Integer(Net.all.Length);
    begin
       case Current_State.all is
          when FOLLOWER =>
@@ -203,7 +205,16 @@ package body Node is
                null;
             end if;
          when CANDIDATE =>
-            null;
+            for I in Net.all.First_Index .. Net.all.Last_Index loop
+               if Msg in Vote'Class then 
+                  --Votation handling
+                  Votes_Counter:=Votes_Counter+1;
+               end if;
+            end loop;
+            if(Votes_Counter > (Nodes_number/2)) then
+               --Node becomes the leader
+               Current_State.all:=LEADER;
+            end if;
          when LEADER =>
             null;
       end case;
