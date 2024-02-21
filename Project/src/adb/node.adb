@@ -109,7 +109,6 @@ package body Node is
 
             if not Queue.Is_Empty (net.all (id).all) then
                Start_Time := Clock;
-
                HandleMessage
                  (Net, Id, Queue.Dequeue (net.all (Id).all),
                   Last_Heartbeat'Access, Current_Leader'Access,
@@ -160,26 +159,25 @@ package body Node is
       Current_State  : access State; Log : LogEntryVector.Vector)
    is
       Log_Length : Integer := Integer (Log.Length);
+
+      procedure DeleteInconsistentEntries
+        (Log : LogEntryVector.Vector; Index : Integer)
+      is
+      begin
+         Log.Delete (Index, Log.Length - Index + 1);
+      end DeleteInconsistentEntries;
+
    begin
       case Current_State.all is
          when FOLLOWER =>
             if Msg in Heartbeat'Class then
                Last_Heartbeat.all := Clock;
                Current_Leader.all := Msg.Sender_Id;
-               --Broadcast (Id, Net, Commit'(Sender_Id => Id, Term => 12_837, Log_length => Log_Length));
 
             elsif Msg in Candidated'Class then
-               --Election handling
+               -- Election handling
                if Log_Length < Msg.Log_length then
-                  --node has to vote for that candidate
-                  SendToId
-                    (Net, Message.Vote'(Current_Term.all, Id, Log_Length),
-                     Msg.Sender_Id);
-               end if;
-            elsif Msg in Candidated'Class then
-               --Election handling
-               if Log_Length < Msg.Log_length then
-                  --node has to vote for that candidate
+                  -- Node has to vote for that candidate
                   SendToId
                     (Net, Message.Vote'(Current_Term.all, Id, Log_Length),
                      Msg.Sender_Id);
@@ -193,14 +191,70 @@ package body Node is
                      declare
                         Element : LogEntry.LogEntry := Log (I);
                      begin
-                        Set_State (Element,  LogEntry.COMMITTED);
+                        Set_State (Element, LogEntry.COMMITTED);
                      end;
                   end if;
                end loop;
 
             elsif Msg in AppendEntry'Class then
-               -- check the validity of the append operation on the Log
-               null;
+               --  Identify Inconsistencies: It first checks for any discrepancies between its log and the incoming entries,
+               --   specifically looking for entries at the same index but with different terms.
+               --  Resolve Conflicts: If inconsistencies are found, the node deletes the conflicting entry and all
+               --   subsequent entries in its log to align with the leader's log.
+               --  Append New Entries: The node then appends any new entries from the leader that it doesn't already have,
+               --   ensuring its log matches the leader's.
+               --  Update Commit Index: If the leader's commit index is higher than the node's, the node updates its commit
+               --   index to reflect the latest committed entry, capped by the last new entry appended from the current RPC.
+               --  Respond to Leader: Finally, the node sends a response back to the leader. This response indicates success
+               --   if the entries were appended without issue or details of any conflict if inconsistencies were detected
+               --   and resolved.
+               declare
+                  Incoming_Entry       : LogEntry.LogEntry :=
+                    AppendEntry (Msg).LogEntri.Term;
+                  Incoming_Entry_Term  : Integer           :=
+                    AppendEntry (Msg).LogEntri.Term;
+                  Incoming_Entry_Index : Integer           :=
+                    AppendEntry (Msg).LogEntri.Index;
+
+                  Last_Entry       : LogEntry.LogEntry;
+                  Last_Entry_Term  : Integer := 0;
+                  Last_Entry_Index : Integer := 0;
+               begin
+                  --  If the Log is not empty initialization of parameters
+                  if not Log.Is_Empty then
+                     Last_Entry       := Log (Log.Last_Index);
+                     Last_Entry_Term  := Last_Entry.Term;
+                     Last_Entry_Index := Last_Entry.Index;
+                  end if;
+
+                  if Incoming_Entry_Index = Last_Entry_Index + 1 and
+                    Incoming_Entry_Term = Last_Entry_Term
+                  then
+                     --  Valid Entry
+                     LogEntryVector.Append (Log, Incoming_Entry);
+                     SendToLeader
+                       (Current_Leader => Current_Leader.all, Net => Net,
+                        Msg            =>
+                          Appended'(Id, Current_Term, Integer (Log.Length)));
+
+                  elsif Incoming_Entry_Index <= Last_Entry_Index then
+                     --  Local index beside incoming index
+                     DeleteInconsistentEntries (Log => Log, Index => Incoming_Entry_Index);
+                     LogEntryVector.Append (Container => Log, New_Item => Incoming_Entry);
+
+                  else
+                     --  Missing some entries
+                     SendToLeader
+                       (Current_Leader => Current_Leader.all, Net => Net,
+                        Msg            =>
+                          LogOutdated'
+                            (Sender_Id  => Id, Term => Current_Term,
+                             Log_length => Integer (Log.Length),
+                             LogEntri   => Last_Entry));
+                  end if;
+
+               end;
+
             end if;
          when CANDIDATE =>
             null;
