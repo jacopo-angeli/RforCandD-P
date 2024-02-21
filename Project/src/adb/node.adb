@@ -1,11 +1,19 @@
-with Ada.Text_IO;   use Ada.Text_IO;
-with Ada.Real_Time; use Ada.Real_Time;
+with Ada.Text_IO;
+with Ada.Real_Time;
+with Ada.Strings.Fixed;
 with Ada.Numerics.Discrete_Random;
 with Ada.Containers.Vectors;
-with Message;       use Message;
+
+with Message;
+with Logger;
 with LogEntry;
 
 package body Node is
+   use Ada.Text_IO;
+   use Ada.Real_Time;
+   use Ada.Strings.Fixed;
+   use Message;
+   use Logger;
 
    task body Node is
 
@@ -13,10 +21,7 @@ package body Node is
 
       Current_State : aliased State := FOLLOWER;
 
-      package LogEntry_Vector is new Ada.Containers.Vectors
-        (Index_Type => Natural, Element_Type => LogEntry.LogEntry,
-         "="        => LogEntry."=");
-      Log : LogEntry_Vector.Vector;
+      Log : LogEntryVector.Vector;
 
       Current_Leader : aliased Integer := -1;
       Current_Log : aliased Integer := Log.Length;
@@ -28,11 +33,11 @@ package body Node is
       Vote_Happening   : Boolean;
 
       Last_Heartbeat : aliased Time := Clock;
-      CUrrent_Time   :  Time := Clock;
+      CUrrent_Time   : Time         := Clock;
 
       Election_Timeout_Duration : Integer;
 
-      Heartbeat_Timeout_Duration : Integer;
+      Heartbeat_Timeout_Duration       : Integer;
       Milliseconds_From_Last_Heartbeat : Duration;
 
       package Integer_Random is new Ada.Numerics.Discrete_Random (Integer);
@@ -43,24 +48,29 @@ package body Node is
       Election_Timeout_Duration := Integer_Random.Random (Gen) mod 151 + 1_500;
       Heartbeat_Timeout_Duration := Integer_Random.Random (Gen) mod 101 + 500;
       Milliseconds_From_Last_Heartbeat :=
-            To_Duration (Current_Time - Last_Heartbeat) * 1_000;
+        To_Duration (CUrrent_Time - Last_Heartbeat) * 1_000;
       if Id = 1 then
          Broadcast (Id, Net, Message.Heartbeat'(Sender_Id => Id, Term => Current_Term, log.Length));
          Current_State:=LEADER;
       end if;
 
       loop
-         Put_Line
-           ("Node(" & Integer'Image (Id) & " ) running with leader " &
-            Integer'Image (Current_Leader) & ";");
+         Log_Row
+           (File_Name => "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left),
+            Row       =>
+              Table_Row'
+                (Id             => Id, Current_Leader => Current_Leader,
+                 Current_Term => Current_Term, Current_State => Current_State,
+                 Vector_Entries => Log));
          declare
             Start_Time, End_Time : Time;
             Milliseconds         : Integer := 0;
          begin
-         --Managment Last_Heartbeat using milliseconds
-         if(Current_State = LEADER) then
-            if(Integer (Milliseconds_From_Last_Heartbeat) >
-               Heartbeat_Timeout_Duration + Milliseconds)
+            --Managment Last_Heartbeat using milliseconds
+            if (Current_State = LEADER) then
+               if
+                 (Integer (Milliseconds_From_Last_Heartbeat) >
+                  Heartbeat_Timeout_Duration + Milliseconds)
                then
                -- Heartbeat expired
                -- Send heartbeat to all the nodes
@@ -99,7 +109,7 @@ package body Node is
                Milliseconds :=
                  Integer (To_Duration (End_Time - Start_Time)) * 1_000;
             end if;
-   
+
          end;
          delay 1.0;
       end loop;
