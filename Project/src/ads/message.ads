@@ -6,7 +6,7 @@ package Message is
     type Message is abstract tagged record
         Term        : Integer;
         Sender_Id   : Integer;
-        Log_length  : Ada.Containers.Count_Type;
+        Log_length  : Integer;
     end record;
 
     function Message_Stringify (Msg : in Message) return String is abstract;
