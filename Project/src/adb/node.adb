@@ -164,20 +164,6 @@ package body Node is
       is
          Log_Length : Integer := Integer(Log.Length);
       begin
-         case Current_State.all is
-            when FOLLOWER =>
-               if Msg in Heartbeat'Class then
-                  Last_Heartbeat.all := Clock;
-                  Current_Leader.all := Msg.Sender_Id;
-     (Net            : access QueueVector.Vector; Id : Integer;
-      Msg            : Message.Message'Class; Last_Heartbeat : access Time;
-      Current_Leader : access Integer; Current_Term : access Integer;
-      Current_State  : access State;
-      Log            : LogAccess)
-
-   is
-   Log_Length : aliased Ada.Containers.Count_Type := Log.all.Length;
-   begin
       case Current_State.all is
          when FOLLOWER =>
             if Msg in Heartbeat'Class then
