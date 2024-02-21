@@ -35,7 +35,8 @@ private
       Msg            : Message.Message'Class; Last_Heartbeat : access Time;
       Current_Leader : access Integer; Current_Term : access Integer;
       Current_State  : access State;
-      log            : LogEntryVector.Vector);
+      log            : LogEntryVector.Vector;
+      Votes_Counter :  in out Integer);
 
   --  Send message to all the other node of the network
     procedure Broadcast
