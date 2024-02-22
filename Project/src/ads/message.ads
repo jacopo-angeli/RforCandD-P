@@ -1,60 +1,51 @@
 with LogEntry;
 with Ada.Containers;
 package Message is
-
-    --  Interface
-    type Message is abstract tagged record
-        Term        : Integer;
-        Sender_Id   : Integer;
-        Log_length  : Integer;
-    end record;
-
-    function Message_Stringify (Msg : in Message) return String is abstract;
-
-    -- SUBTYPES --
-    
-    -- LEADER --
-    
-    type ClientOperation is new Message with null record;
-    function Message_Stringify (Msg : in ClientOperation) return String;
-    
-    type Committed is new Message with null record;
-    function Message_Stringify (Msg : in Committed) return String;
-    
-    type Appended is new Message with null record;
-    function Message_Stringify (Msg : in Appended) return String;
-
-    type LogOutdated is new Message with record
-        LogEntri : LogEntry.LogEntry;
-    end record;
-    function Message_Stringify (Msg : in LogOutdated) return String;
-    
-    
-    -- FOLLOWER --
-    
-    type Candidated is new Message with null record;
-    function Message_Stringify (Msg : in Candidated) return String;
-
-    type Commit is new Message with record
-        LogEntri : LogEntry.LogEntry;
-    end record;
-    function Message_Stringify (Msg : in Commit) return String;
-    
+    type Message is tagged null record;
+    --  AppendEntries RPC
     type AppendEntry is new Message with record
-        LogEntri : LogEntry.LogEntry;
+        --  Leader’s term
+        Term         : Integer;
+        --  So follower can redirect clients
+        LeaderId     : Integer;
+        --  Index of log entry immediately preceding new ones
+        PrevLogIndex : Integer;
+        --  Term of prevLogIndex entry
+        PrevLogTerm  : Integer;
+        --  Log entries to store (empty for heartbeat; may send more than one for efficiency)
+        LogEntri     : LogEntry.LogEntry;
+        --  Leader’s commitIndex
+        LeaderCommit : Integer;
     end record;
+
+    type AppendEntryResponse is new Message with record
+        --  CurrentTerm, for leader to update itself
+        Term    : Integer;
+        --  True if follower contained entry matching prevLogIndex and prevLogTerm
+        Success : Boolean;
+    end record;
+
     function Message_Stringify (Msg : in AppendEntry) return String;
-    
+    function Message_Stringify (Msg : in AppendEntryResponse) return String;
 
-    -- CANDIDATE --
-
-    type Vote is new Message with null record;
-    function Message_Stringify (Msg : in Vote) return String;
-
-
-    -- COMMON --
-    
-    type Heartbeat is new Message with null record;
-    function Message_Stringify (Msg : in Heartbeat) return String;
+    --  RequestVote RPC
+    type RequestVote is new Message with record
+        -- Candidate’s term
+        Term         : Integer;
+        -- Candidate requesting vote
+        CandidateId  : Integer;
+        -- Index of candidate’s last log entry (§5.4)
+        LastLogIndex : Integer;
+        --term of candidate’s last log entry (§5.4)
+        LastLogTerm  : Integer;
+    end record;
+    type RequestVoteResponse is new Message with record
+        -- currentTerm, for candidate to update itself
+        Term        : Integer;
+        -- true means candidate received vote
+        VoteGranted : Boolean;
+    end record;
+    function Message_Stringify (Msg : in RequestVote) return String;
+    function Message_Stringify (Msg : in RequestVoteResponse) return String;
 
 end Message;

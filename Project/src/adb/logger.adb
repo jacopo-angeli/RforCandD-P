@@ -6,7 +6,7 @@ with LogEntry;
 
 package body Logger is
 
-    procedure Log_Row (File_Name : String; Row : Table_Row) is
+    procedure Log (File_Name : String; Content : String) is
         File : File_Type;
     begin
         begin
@@ -22,41 +22,10 @@ package body Logger is
                     Name => ("logs/" & File_Name & ".log"));
         end;
         --  Time Stamp
-        Put (File => File, Item => Image (Clock));
-
-        --  Current leader
-        Put (File => File,
-            Item  =>
-               " $ Current leader : " & Integer'Image (Row.Current_Leader));
-
-        --  Current state
-        Put (File => File, Item => ", Current state : ");
-        case Row.Current_State is
-            when Node.LEADER =>
-                Put (File => File, Item => "LEADER");
-            when Node.CANDIDATE =>
-                Put (File => File, Item => "CANDIDATE");
-            when Node.FOLLOWER =>
-                Put (File => File, Item => "FOLLOWER");
-        end case;
-
-        -- Current term
-        Put (File => File,
-          Item    => ", Current term : " & Integer'Image (Row.Current_Term));
-
-        -- Last log entry
-        declare
-            Content : String := "empty";
-        begin
-            if not Row.Vector_Entries.Is_Empty then
-                Content :=
-                   LogEntry.Entry_Stringify
-                      (Row.Vector_Entries (Row.Vector_Entries.Last_Index));
-            end if;
-            Put_Line (File => File, Item => ", Last log entry : " & Content & " ;");
-        end;
+        Put (File => File, Item => Image (Clock) & " $ ");
+        Put_Line (File => File, Item => Content);
 
         Close (File);
-    end Log_Row;
+    end Log;
 
 end Logger;
