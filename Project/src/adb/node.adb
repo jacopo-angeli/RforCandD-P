@@ -13,7 +13,7 @@ package body Node is
    use Ada.Real_Time;
    use Ada.Strings.Fixed;
    use Message;
-   use LogEntry;
+   use Ada.Containers;
 
    task body Node is
 
@@ -54,7 +54,8 @@ package body Node is
       Current_State : aliased State := FOLLOWER;
 
       --  Log
-      LogFileName : constant String := "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
+      LogFileName : constant String :=
+        "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
 
       package Integer_Random is new Ada.Numerics.Discrete_Random (Integer);
       Gen : Integer_Random.Generator;
@@ -192,41 +193,169 @@ package body Node is
 
    procedure SendToId
      (Net      : access QueueVector.Vector; Msg : Message.Message'Class;
-      Reciever : Integer)
+      Receiver : Integer)
    is
    begin
-      Queue.Enqueue (net.all (Reciever).all, Msg);
+      Queue.Enqueue (net.all (Receiver).all, Msg);
 
    end SendToId;
 
    procedure HandleMessage
-     (Net            :        access QueueVector.Vector; Id : Integer;
-      Msg            :    Message.Message'Class; Last_Heartbeat : access Time;
-      Current_Leader :        access Integer; Current_Term : access Integer;
-      Current_State  :        access State; Log : LogEntryVector.Vector;
-      Votes_Counter  : in out Integer)
+     (Net           : access QueueVector.Vector; Id : Integer;
+      Msg           : Message.Message'Class; LastHeartbeat : access Time;
+      CurrentLeader : access Integer; CurrentTerm : access Integer;
+      CurrentState  : access State; Log : in out LogEntryVector.Vector;
+      CommitIndex   : access Integer; VotedFor : access Integer)
    is
-      --  Log_Length : Integer := Integer (Log.Length);
-
-      --  procedure DeleteInconsistentEntries
-      --    (Log : LogEntryVector.Vector; Index : Integer)
-      --  is
-      --  begin
-      --     Log.Delete (Index, Log.Length - Index + 1);
-      --  end DeleteInconsistentEntries;
-
-      --  Log_Length   : Integer := Integer (Log.Length);
-      --  Nodes_number : Integer := Integer (Net.all.Length);
    begin
-      case Current_State.all is
+      case CurrentState.all is
 
          when FOLLOWER =>
             if Msg in AppendEntry'Class then
-               --  TODO
-               null;
+
+               --  1. Reply false if term < currentTerm (§5.1)
+               --  2. Reply false if log doesn’t contain an entry at prevLogIndex
+               --     whose term matches prevLogTerm (§5.3)
+               --  3. If an existing entry conflicts with a new one (same index
+               --     but different terms), delete the existing entry and all that
+               --     follow it (§5.3)
+               --  4. Append any new entries not already in the log
+               --  5. If leaderCommit > commitIndex, set commitIndex =
+               --     min(leaderCommit, index of last new entry)
+
+               declare
+                  MessageLogEntry          : LogEntry.LogEntry :=
+                    AppendEntry (Msg).LogEntri;
+                  MessageTerm              : Integer := AppendEntry (Msg).Term;
+                  MessagePrevLogIndex      : Integer           :=
+                    AppendEntry (Msg).PrevLogIndex;
+                  MessageLeaderCommitIndex : Integer           :=
+                    AppendEntry (Msg).LeaderCommit;
+                  MessageLeaderId : Integer := AppendEntry (Msg).LeaderId;
+               begin
+
+                  --  1. Reply false if term < currentTerm (§5.1)
+                  if MessageTerm < CurrentTerm.all then
+                     SendToId
+                       (Net      => Net,
+                        Msg      =>
+                          Message.AppendEntryResponse'
+                            (Term => CurrentTerm.all, Success => False),
+                        Receiver => MessageLeaderId);
+                     return;
+                  end if;
+
+                  declare
+                     Element : LogEntry.LogEntry;
+                  begin
+                     Element := Log (MessagePrevLogIndex);
+
+                     --  3. If an existing entry conflicts with a new one (same index
+                     --     but different terms), delete the existing entry and all that
+                     --     follow it (§5.3)
+                     if Element.Term /= MessageTerm then
+                        Log.Delete
+                          (Element.Index,
+                           Log.Length -
+                           Ada.Containers.Count_Type (Element.Index));
+                     end if;
+
+                     --  4. Append any new entries not already in the log
+                     LogEntryVector.Append (Log, MessageLogEntry);
+
+                     --  5. If leaderCommit > commitIndex, set commitIndex =
+                     --     min(leaderCommit, index of last new entry)
+                     CommitIndex.all :=
+                       Integer'Min
+                         (MessageLeaderCommitIndex, MessageLogEntry.Index);
+
+                     SendToId
+                       (Net      => Net,
+                        Msg      =>
+                          Message.AppendEntryResponse'
+                            (Term => CurrentTerm.all, Success => True),
+                        Receiver => MessageLeaderId);
+
+                  exception
+
+                     --  2. Reply false if log doesn’t contain an entry at prevLogIndex
+                     --     whose term matches prevLogTerm (§5.3)
+                     when Constraint_Error =>
+
+                        SendToId
+                          (Net      => Net,
+                           Msg      =>
+                             Message.AppendEntryResponse'
+                               (Term => CurrentTerm.all, Success => False),
+                           Receiver => MessageLeaderId);
+                        return;
+
+                  end;
+
+               end;
+
             elsif Msg in RequestVote'Class then
-               --  TODO
-               null;
+
+               --  1. Reply false if term < currentTerm (§5.1)
+               --  2. If votedFor is null or candidateId, and candidate’s log is at
+               --     least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
+
+               declare
+
+                  MessageTerm         : Integer := RequestVote (Msg).Term;
+                  MessageCandidateId  : Integer :=
+                    RequestVote (Msg).CandidateId;
+                  MessageLastLogIndex : Integer :=
+                    RequestVote (Msg).LastLogIndex;
+                  MessageLastLogTerm  : Integer :=
+                    RequestVote (Msg).LastLogTerm;
+
+               begin
+                  --  1. Reply false if term < currentTerm (§5.1)
+                  if MessageTerm < CurrentTerm.all then
+                     SendToId
+                       (Net      => Net,
+                        Msg      =>
+                          Message.RequestVoteResponse'
+                            (Term => CurrentTerm.all, VoteGranted => False),
+                        Receiver => MessageCandidateId);
+                     return;
+                  end if;
+
+                  declare
+                     LastLogElement : LogEntry.LogEntry;
+                  begin
+                     LastLogElement := Log (Log.Last_Index);
+
+                     --  2. If votedFor is null or candidateId, and candidate’s log is at
+                     --     least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
+                     if
+                       (VotedFor.all = -1 or
+                        VotedFor.all = MessageCandidateId) and
+                       (LastLogElement.Index <= MessageLastLogIndex and
+                        LastLogElement.Term <= MessageLastLogTerm)
+                     then
+                        SendToId
+                          (Net      => Net,
+                           Msg      =>
+                             Message.RequestVoteResponse'
+                               (Term => CurrentTerm.all, VoteGranted => True),
+                           Receiver => MessageCandidateId);
+                        return;
+                     end if;
+                  exception
+                     when Constraint_Error =>
+                        -- Handle the case where the index is out of bounds
+                        SendToId
+                          (Net      => Net,
+                           Msg      =>
+                             Message.RequestVoteResponse'
+                               (Term => CurrentTerm.all, VoteGranted => True),
+                           Receiver => MessageCandidateId);
+                        return;
+                  end;
+               end;
+
             else
                --  TODO : Theoretically impossible
                null;

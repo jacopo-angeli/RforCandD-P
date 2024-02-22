@@ -36,7 +36,7 @@ package Message is
         CandidateId  : Integer;
         -- Index of candidate’s last log entry (§5.4)
         LastLogIndex : Integer;
-        --term of candidate’s last log entry (§5.4)
+        -- Term of candidate’s last log entry (§5.4)
         LastLogTerm  : Integer;
     end record;
     type RequestVoteResponse is new Message with record
