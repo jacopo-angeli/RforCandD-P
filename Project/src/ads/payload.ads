@@ -24,4 +24,7 @@ package Payload is
         Quantity   : Float;
     end record;
 
+    type EmptyPayload is new Payload with null record;
+    
+
 end Payload;

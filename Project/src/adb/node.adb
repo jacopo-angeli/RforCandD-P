@@ -7,6 +7,7 @@ with Ada.Containers.Vectors;
 with Message;
 with Logger;
 with LogEntry;
+with Payload;
 
 package body Node is
    use Ada.Text_IO;
@@ -44,6 +45,7 @@ package body Node is
 
       -- Cosa nostra
       TimoutDuration : Integer;
+      Milliseconds_From_Last_Heartbeat : Integer:=0;
 
       AppendedCounter : Integer := 0;
       VotesCounter    : Integer := 0;
@@ -68,9 +70,46 @@ package body Node is
       TimoutDuration :=
         Integer_Random.Random (Gen) mod 151 +
         1_500; -- TODO : Change to mod 151 + 150
+        Milliseconds_From_Last_Heartbeat:= Integer(To_Duration(LastAppendEntryTimestamp-Current_Time));
 
       -- Loop
       loop
+       --     --Managment Last_Heartbeat using milliseconds
+              if (Current_State = LEADER) then
+                 if (Integer (Milliseconds_From_Last_Heartbeat) > TimoutDuration) then
+                  -- Heartbeat expired
+                  -- Send heartbeat to all the nodes
+                  -- Make Last_Heartbeat = 0
+                    --Broadcast(Id, Net, Message.AppendEntry'(CurrentTerm,Id, LastApplied, Log(LastApplied).Term, 
+                      --LogEntry.LogEntry(Term=> CurrentTerm, Index=>LastApplied, Peyload=>Payload.EmptyPayload()),CommitIndex)));
+                     Broadcast(Id => Id, Net => Net, Msg => Message.AppendEntry(CurrentTerm,Id, LastApplied, Log(LastApplied).Term, 
+                      LogEntry.LogEntry(Term=> CurrentTerm, Index=>LastApplied, Peyload=>Payload.EmptyPayload()),CommitIndex));
+                  
+                    LastAppendEntryTimestamp:= Clock;
+                  end if;
+               end if;
+              --Follower election timeout managment
+               if (Current_State = FOLLOWER) then
+                 if
+                   (Integer (Milliseconds_From_Last_Heartbeat) > TimoutDuration)
+                 then
+                    -- Election timeout expired
+                    -- Set state to CANDIDATE
+                    -- Update the term variable
+                    -- Update the AppendEntryTimeStamp
+                    Current_State := CANDIDATE;
+                    CurrentTerm  := CurrentTerm + 1;
+                    LastAppendEntryTimestamp:= Clock;
+                 end if;
+               end if;
+               if(Current_State = CANDIDATE) then
+                  --PRECONDITION: Election Timeout has expired so wait another timeout duration to request another election
+                  if(Integer(Milliseconds_From_Last_Heartbeat)>TimoutDuration) then
+                     --(c) a period of time goes by with no winner.
+                     -- (c.1) Send another RequestVote
+                     Broadcast(Id => Id, Net => Net, Msg => Message.RequestVote'(Term=> CurrentTerm, CandidateId=> Id, LastLogIndex=>Log(Log.Last_Index).Index, LastLogTerm=>Log(Log.Last_Index).Term));
+                  end if;
+               end if;
          --  CANDIDATE TimeoutDuration managment
          --  A candidate continues in
          --  this state until one of three things happens: (a) it wins the
