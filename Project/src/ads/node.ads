@@ -6,6 +6,8 @@ with Queue;
 with LogEntry;
 package Node is
 
+  BG : array (1 .. 4) of access Boolean;
+
   type State is (LEADER, CANDIDATE, FOLLOWER);
 
   --  Node and access Node
@@ -23,7 +25,8 @@ package Node is
   type LogAccess is access all LogEntryVector.Vector;
 
   -- More on Node task type
-  task type Node (Id : Integer; Net : access QueueVector.Vector);
+  task type Node
+   (Id : Integer; Net : access QueueVector.Vector; Paused : access Boolean);
 
   -- QVector instatialization to make it live more than main procedure
   QVector : aliased QueueVector.Vector := QueueVector.Empty_Vector;

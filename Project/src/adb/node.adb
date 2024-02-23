@@ -74,8 +74,11 @@ package body Node is
       LogEntryVector.Append
         (Log, LogEntry.LogEntry'(CurrentTerm, 1, Payload.EmptyPayload));
 
-      -- Loop
       loop
+         while Paused.all loop
+            Logger.Log (File_Name => LogFileName, Content => "Node paused.");
+            delay 1.0;
+         end loop;
 
          --  Message handle
          while not Queue.Is_Empty (net.all (id).all) loop
@@ -139,10 +142,19 @@ package body Node is
                   -- Set state to CANDIDATE
                   -- Update the term variable
                   -- Update the AppendEntryTimeStamp
-                  VotesCounter         := 0;
-                  CurrentTerm          := CurrentTerm + 1;
                   CurrentState         := CANDIDATE;
+                  CurrentTerm          := CurrentTerm + 1;
+                  VotesCounter         := 1;
                   CandidationTimestamp := Clock;
+                  Broadcast
+                    (Id  => Id, Net => Net,
+                     Msg =>
+                       Message.RequestVote'
+                         (Term         => CurrentTerm, CandidateId => Id,
+                          LastLogIndex => Log (Log.Last_Index).Index,
+                          LastLogTerm  => Log (Log.Last_Index).Term));
+                  Logger.Log
+                    (File_Name => LogFileName, Content => "Requested vote...");
                end if;
 
             end;
@@ -153,26 +165,6 @@ package body Node is
             --PRECONDITION: Election Timeout has expired so wait another timeout duration to request another election
             --(c) a period of time goes by with no winner.
             -- (c.1) Send another RequestVote
-            declare
-            begin
-               Broadcast
-                 (Id  => Id, Net => Net,
-                  Msg =>
-                    Message.RequestVote'
-                      (Term         => CurrentTerm, CandidateId => Id,
-                       LastLogIndex => Log (Log.Last_Index).Index,
-                       LastLogTerm  => Log (Log.Last_Index).Term));
-            exception
-               when others =>
-                  Broadcast
-                    (Id  => Id, Net => Net,
-                     Msg =>
-                       Message.RequestVote'
-                         (Term         => CurrentTerm, CandidateId => Id,
-                          LastLogIndex => 0, LastLogTerm => 0));
-            end;
-            Logger.Log
-              (File_Name => LogFileName, Content => "Requested vote...");
 
             --  The third possible outcome is that a candidate neither
             --  wins nor loses the election: if many followers become
@@ -186,11 +178,24 @@ package body Node is
                  Integer (To_Duration (Clock - CandidationTimestamp)) * 1_000;
             begin
                if TimeSpanFromCandidation > TimeoutDuration then
-                  CurrentState := FOLLOWER;
+                  CurrentState         := CANDIDATE;
+                  CurrentTerm          := CurrentTerm + 1;
+                  VotesCounter         := 1;
+                  CandidationTimestamp := Clock;
+                  Broadcast
+                    (Id  => Id, Net => Net,
+                     Msg =>
+                       Message.RequestVote'
+                         (Term         => CurrentTerm, CandidateId => Id,
+                          LastLogIndex => Log (Log.Last_Index).Index,
+                          LastLogTerm  => Log (Log.Last_Index).Term));
+                  Logger.Log
+                    (File_Name => LogFileName, Content => "Requested vote...");
                end if;
             end;
          end if;
          delay 0.3;
+
       end loop;
    end Node;
 
@@ -204,12 +209,6 @@ package body Node is
             Queue.Enqueue (net.all (I).all, Msg);
          end if;
       end loop;
-   exception
-
-      --  2. Reply false if log doesn’t contain an entry at prevLogIndex
-      --     whose term matches prevLogTerm (§5.3)
-      when Constraint_Error =>
-         Put_Line ("Exception");
    end Broadcast;
 
    procedure SendToId
@@ -260,6 +259,17 @@ package body Node is
                     AppendEntry (Msg).LeaderCommit;
                   MessageLeaderId : Integer := AppendEntry (Msg).LeaderId;
                begin
+                  Logger.Log
+                    (File_Name => LogFileName,
+                     Content   =>
+                       "Follower and received message AppendEntry (" &
+                       Integer'Image (MessageTerm) & "," &
+                       Integer'Image (MessageLeaderId) & ")");
+
+                  if MessageTerm > CurrentTerm.all then
+                     CurrentTerm.all := MessageTerm;
+                     VotedFor.all    := -1;
+                  end if;
 
                   --  1. Reply false if term < currentTerm (§5.1)
                   if MessageTerm < CurrentTerm.all then
@@ -302,7 +312,7 @@ package body Node is
                           Message.AppendEntryResponse'
                             (Term => CurrentTerm.all, Success => True),
                         Receiver => MessageLeaderId);
-                  
+
                   end;
 
                end;
@@ -324,11 +334,18 @@ package body Node is
                     RequestVote (Msg).LastLogTerm;
 
                begin
+                  if MessageTerm > CurrentTerm.all then
+                     CurrentTerm.all := MessageTerm;
+                     VotedFor.all    := -1;
+                  end if;
+
                   Logger.Log
                     (File_Name => LogFileName,
                      Content   =>
-                       "Request vote from " &
-                       Integer'Image (MessageCandidateId));
+                       "(" & Integer'Image (CurrentTerm.all) &
+                       ") : Request vote from " &
+                       Integer'Image (MessageCandidateId) & " with term " &
+                       Integer'Image (MessageTerm));
 
                   --  1. Reply false if term < currentTerm (§5.1)
                   if MessageTerm < CurrentTerm.all then
@@ -378,7 +395,7 @@ package body Node is
                                (Term => CurrentTerm.all, VoteGranted => False),
                            Receiver => MessageCandidateId);
                      end if;
-                  
+
                   end;
                end;
 
@@ -406,10 +423,26 @@ package body Node is
 
                begin
 
-                  if MessageTerm <= CurrentTerm.all then
-                     CurrentState.all := FOLLOWER;
-                     return;
-                  end if;
+                  Logger.Log
+                    (File_Name => LogFileName,
+                     Content   =>
+                       "Candidate and received message AppendEntry (" &
+                       Integer'Image (MessageTerm) & "," &
+                       Integer'Image (MessageLeaderId) & ")");
+
+                  --  If AppendEntries RPC received from new leader: convert to follower
+                  --  if MessageTerm > CurrentTerm.all then
+                  --     CurrentTerm.all  := MessageTerm;
+                  --     VotedFor.all     := -1;
+                  --     CurrentState.all := FOLLOWER;
+                  --     Logger.Log
+                  --       (File_Name => LogFileName,
+                  --        Content   =>
+                  --          "AppendEntries RPC received from new leader: convert to follower.");
+                  --     return;
+                  --  end if;
+                  CurrentState.all := FOLLOWER;
+                  LastAppendEntryTimestamp.all := Clock;
 
                end;
 
@@ -454,6 +487,25 @@ package body Node is
                null;
             elsif Msg in AppendEntry'Class then
                --  TODO
+               declare
+
+                  MessageTerm     : Integer := AppendEntry (Msg).Term;
+                  MessageLeaderId : Integer := AppendEntry (Msg).LeaderId;
+                  NetLenght       : Integer := Integer (Net.all.Length);
+
+               begin
+
+                  Logger.Log
+                    (File_Name => LogFileName,
+                     Content   =>
+                       "Candidate and received message AppendEntry (" &
+                       Integer'Image (MessageTerm) & "," &
+                       Integer'Image (MessageLeaderId) & ")");
+
+                  CurrentTerm.all  := MessageTerm;
+                  CurrentState.all := FOLLOWER;
+                  LastAppendEntryTimestamp.all := Clock;
+               end;
                null;
             else
                --  TODO : Theoretically impossible
