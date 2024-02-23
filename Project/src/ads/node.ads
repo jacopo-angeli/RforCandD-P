@@ -32,10 +32,10 @@ private
   --  Handle message
   procedure HandleMessage
    (Net : access QueueVector.Vector; Id : Integer; Msg : Message.Message'Class;
-    LastHeartbeat :        access Time; CurrentLeader : access Integer;
-    CurrentTerm   :        access Integer; CurrentState : access State;
-    Log           : in out LogEntryVector.Vector; CommitIndex : access Integer;
-    VotedFor      :        access Integer);
+    LastAppendEntryTimestamp : access Time; CurrentTerm : access Integer;
+    CurrentState : access State; Log : in out LogEntryVector.Vector;
+    CommitIndex              : access Integer; VotedFor : access Integer;
+    VotesCounter             : access Integer);
 
   --  Send message to all the other node of the network
   procedure Broadcast

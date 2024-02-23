@@ -1,30 +1,19 @@
+with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 package Payload is
+
+    type PayloadType is
+       (MONEYTRANSFER, ACCOUNTOPEN, WITHDRAWAL, DEPOSIT, EMPTY);
     --  """INTERFACE"""
-    type Payload is tagged null record;
+    type Payload is record
 
-    --  SUBTYPES
-    type MoneyTransfer is new Payload with record
-        From_Account : String (1 .. 255);
-        To_Account   : String (1 .. 255);
+        Sort         : PayloadType;
+        From_Account : Unbounded_String;
+        To_Account   : Unbounded_String;
         Quantity     : Float;
+        New_Account  : Unbounded_String;
+        Owner        : Unbounded_String;
+
     end record;
 
-    type AccountOpen is new Payload with record
-        New_Account : String (1 .. 255);
-        Owner       : String (1 .. 255);
-    end record;
-
-    type Withdrawal is new Payload with record
-        From_Account : String (1 .. 255);
-        Quantity     : Float;
-    end record;
-
-    type Deposit is new Payload with record
-        To_Account : String (1 .. 255);
-        Quantity   : Float;
-    end record;
-
-    type EmptyPayload is new Payload with null record;
-    
-
+    function EmptyPayload return Payload;
 end Payload;

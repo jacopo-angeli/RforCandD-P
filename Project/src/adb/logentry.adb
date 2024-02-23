@@ -8,8 +8,6 @@ package body LogEntry is
 
     function "=" (Left, Right : LogEntry) return Boolean is
     begin
-        return
-           Left.Index = Right.Index and Left.State = Right.State and
-           Left.Term = Right.Term;
+        return Left.Index = Right.Index and Left.Term = Right.Term;
     end "=";
 end LogEntry;
