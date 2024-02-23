@@ -44,8 +44,7 @@ package body Node is
       MatchIndex : aliased Integer;
 
       -- Cosa nostra
-      TimeoutDuration                  : Integer;
-      Milliseconds_From_Last_Heartbeat : Integer := 0;
+      TimeoutDuration : aliased Integer;
 
       AppendedCounter : aliased Integer := 0;
       VotesCounter    : aliased Integer := 0;
@@ -53,6 +52,8 @@ package body Node is
       LastAppendEntryTimestamp : aliased Time := Clock;
 
       CurrentState : aliased State := FOLLOWER;
+
+      CandidationTimestamp : Time;
 
       --  Log
       LogFileName : constant String :=
@@ -65,80 +66,90 @@ package body Node is
       --  Costants initialization
       Integer_Random.Reset (Gen);
 
-      --  Variable initialization
+      --  Variable initialization for Follower Nodes
       TimeoutDuration :=
         (Integer_Random.Random (Gen) mod 10 + 3) *
         1_000; -- TODO : Change to mod 151 + 150
 
+      LogEntryVector.Append
+        (Log, LogEntry.LogEntry'(CurrentTerm, 1, Payload.EmptyPayload));
+
       -- Loop
       loop
 
+         --  Message handle
          while not Queue.Is_Empty (net.all (id).all) loop
-            --  Start_Time := Clock;
-            --  Net           : access QueueVector.Vector; Id : Integer;
-            --  Msg           : Message.Message'Class; LastHeartbeat : access Time;
-            --  CurrentLeader : access Integer; CurrentTerm : access Integer;
-            --  CurrentState  : access State; Log : in out LogEntryVector.Vector;
-            --  CommitIndex   : access Integer; VotedFor : access Integer
             HandleMessage
               (Net, Id, Queue.Dequeue (net.all (Id).all),
                LastAppendEntryTimestamp'Access, CurrentTerm'Access,
                CurrentState'Access, Log, CommitIndex'Access, VotedFor'Access,
-               VotesCounter'Access);
-            --  End_Time     := Clock;
-            --  Milliseconds :=
-            --    Integer (To_Duration (End_Time - Start_Time)) * 1_000;
+               VotesCounter'Access, TimeoutDuration'Access);
          end loop;
 
-         Milliseconds_From_Last_Heartbeat :=
-           Integer (To_Duration (Clock - LastAppendEntryTimestamp)) * 1_000;
-
-         --     --Managment Last_Heartbeat using milliseconds
          if (CurrentState = LEADER) then
-            if (Integer (Milliseconds_From_Last_Heartbeat) > TimeoutDuration)
-            then
-            Put_Line ("Leader");
-               -- Heartbeat expired
-               -- Send heartbeat to all the nodes
-               -- Make Last_Heartbeat = 0
-               --Broadcast(Id, Net, Message.AppendEntry'(CurrentTerm,Id, LastApplied, Log(LastApplied).Term,
-               --LogEntry.LogEntry(Term=> CurrentTerm, Index=>LastApplied, Peyload=>Payload.EmptyPayload()),CommitIndex)));
-               declare
-                  EntryToSend   : LogEntry.LogEntry   :=
-                    LogEntry.LogEntry'
-                      (Term    => CurrentTerm, Index => LastApplied,
-                       Peyload => Payload.EmptyPayload);
-                  MessageToSend : Message.AppendEntry :=
-                    Message.AppendEntry'
-                      (Term         => CurrentTerm, LeaderId => Id,
-                       PrevLogIndex => LastApplied,
-                       PrevLogTerm  => Log (LastApplied).Term,
-                       LogEntri => EntryToSend, LeaderCommit => CommitIndex);
-               begin
-                  Put_Line ("Heartbeat");
 
-                  Broadcast (Id => Id, Net => Net, Msg => MessageToSend);
-               end;
+            declare
+               Milliseconds_From_Last_Heartbeat : Integer :=
+                 Integer (To_Duration (Clock - LastAppendEntryTimestamp)) *
+                 1_000;
+            begin
+               if
+                 (Integer (Milliseconds_From_Last_Heartbeat) > TimeoutDuration)
+               then
+                  -- Heartbeat expired
+                  -- Send heartbeat to all the nodes
+                  -- Make Last_Heartbeat = 0
+                  -- Broadcast(Id, Net, Message.AppendEntry'(CurrentTerm,Id, LastApplied, Log(LastApplied).Term,
+                  -- LogEntry.LogEntry(Term=> CurrentTerm, Index=>LastApplied, Peyload=>Payload.EmptyPayload()),CommitIndex)));
+                  declare
+                     EntryToSend   : LogEntry.LogEntry   :=
+                       LogEntry.LogEntry'
+                         (Term    => CurrentTerm, Index => LastApplied,
+                          Peyload => Payload.EmptyPayload);
+                     MessageToSend : Message.AppendEntry :=
+                       Message.AppendEntry'
+                         (Term         => CurrentTerm, LeaderId => Id,
+                          PrevLogIndex => LastApplied,
+                          PrevLogTerm  => Log (LastApplied).Term,
+                          LogEntri     => EntryToSend,
+                          LeaderCommit => CommitIndex);
+                  begin
+                     Broadcast (Id => Id, Net => Net, Msg => MessageToSend);
+                  end;
 
-               LastAppendEntryTimestamp := Clock;
-            end if;
+                  LastAppendEntryTimestamp := Clock;
+               end if;
+            end;
+
          end if;
+
          --Follower election timeout managment
          if (CurrentState = FOLLOWER) then
-            if (Milliseconds_From_Last_Heartbeat > TimeoutDuration) then
-               -- Election timeout expired
-               -- Set state to CANDIDATE
-               -- Update the term variable
-               -- Update the AppendEntryTimeStamp
-               CurrentState := CANDIDATE;
-               CurrentTerm  := CurrentTerm + 1;
-               Put_Line ("Cane di dio");
-            end if;
-         end if;
-         if (CurrentState = CANDIDATE) then
-            Logger.Log
-              (File_Name => LogFileName, Content => "Became a Candidate...");
 
+            declare
+
+               Milliseconds_From_Last_Heartbeat : Integer :=
+                 Integer (To_Duration (Clock - LastAppendEntryTimestamp)) *
+                 1_000;
+
+            begin
+
+               if (Milliseconds_From_Last_Heartbeat > TimeoutDuration) then
+                  -- Election timeout expired
+                  -- Set state to CANDIDATE
+                  -- Update the term variable
+                  -- Update the AppendEntryTimeStamp
+                  VotesCounter         := 0;
+                  CurrentTerm          := CurrentTerm + 1;
+                  CurrentState         := CANDIDATE;
+                  CandidationTimestamp := Clock;
+               end if;
+
+            end;
+
+         end if;
+
+         if (CurrentState = CANDIDATE) then
             --PRECONDITION: Election Timeout has expired so wait another timeout duration to request another election
             --(c) a period of time goes by with no winner.
             -- (c.1) Send another RequestVote
@@ -162,6 +173,22 @@ package body Node is
             end;
             Logger.Log
               (File_Name => LogFileName, Content => "Requested vote...");
+
+            --  The third possible outcome is that a candidate neither
+            --  wins nor loses the election: if many followers become
+            --  candidates at the same time, votes could be split so that
+            --  no candidate obtains a majority. When this happens, each
+            --  candidate will time out and start a new election by incre-
+            --  menting its term and initiating another round of Request-
+            --  Vote RPCs.
+            declare
+               TimeSpanFromCandidation : Integer :=
+                 Integer (To_Duration (Clock - CandidationTimestamp)) * 1_000;
+            begin
+               if TimeSpanFromCandidation > TimeoutDuration then
+                  CurrentState := FOLLOWER;
+               end if;
+            end;
          end if;
          delay 0.3;
       end loop;
@@ -195,11 +222,12 @@ package body Node is
    end SendToId;
 
    procedure HandleMessage
-     (Net         :        access QueueVector.Vector; Id : Integer;
+     (Net             :        access QueueVector.Vector; Id : Integer;
       Msg :    Message.Message'Class; LastAppendEntryTimestamp : access Time;
-      CurrentTerm :        access Integer; CurrentState : access State;
-      Log         : in out LogEntryVector.Vector; CommitIndex : access Integer;
-      VotedFor    :        access Integer; VotesCounter : access Integer)
+      CurrentTerm     :        access Integer; CurrentState : access State;
+      Log : in out LogEntryVector.Vector; CommitIndex : access Integer;
+      VotedFor        :        access Integer; VotesCounter : access Integer;
+      TimeoutDuration :        access Integer)
    is
       LogFileName : constant String :=
         "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
@@ -274,21 +302,7 @@ package body Node is
                           Message.AppendEntryResponse'
                             (Term => CurrentTerm.all, Success => True),
                         Receiver => MessageLeaderId);
-
-                  exception
-
-                     --  2. Reply false if log doesn’t contain an entry at prevLogIndex
-                     --     whose term matches prevLogTerm (§5.3)
-                     when Constraint_Error =>
-
-                        SendToId
-                          (Net      => Net,
-                           Msg      =>
-                             Message.AppendEntryResponse'
-                               (Term => CurrentTerm.all, Success => False),
-                           Receiver => MessageLeaderId);
-                        return;
-
+                  
                   end;
 
                end;
@@ -364,25 +378,7 @@ package body Node is
                                (Term => CurrentTerm.all, VoteGranted => False),
                            Receiver => MessageCandidateId);
                      end if;
-                  exception
-                     when Constraint_Error =>
-                        -- Handle the case where the index is out of bounds
-                        SendToId
-                          (Net      => Net,
-                           Msg      =>
-                             Message.RequestVoteResponse'
-                               (Term => CurrentTerm.all, VoteGranted => True),
-                           Receiver => MessageCandidateId);
-
-                        VotedFor.all := MessageCandidateId;
-
-                        Logger.Log
-                          (File_Name => LogFileName,
-                           Content   =>
-                             "Vote granted to " &
-                             Integer'Image (MessageCandidateId));
-
-                        return;
+                  
                   end;
                end;
 
@@ -393,15 +389,40 @@ package body Node is
 
          when CANDIDATE =>
             if Msg in AppendEntry'Class then
-               --  TODO
-               null;
-            elsif Msg in RequestVoteResponse'Class then
+               --  If the leader’s term (included in its RPC) is at least
+               --  as large as the candidate’s current term, then the candidate
+               --  recognizes the leader as legitimate and returns to follower
+               --  state.
                declare
+
+                  MessageLogEntry          : LogEntry.LogEntry :=
+                    AppendEntry (Msg).LogEntri;
+                  MessageTerm              : Integer := AppendEntry (Msg).Term;
+                  MessagePrevLogIndex      : Integer           :=
+                    AppendEntry (Msg).PrevLogIndex;
+                  MessageLeaderCommitIndex : Integer           :=
+                    AppendEntry (Msg).LeaderCommit;
+                  MessageLeaderId : Integer := AppendEntry (Msg).LeaderId;
+
+               begin
+
+                  if MessageTerm <= CurrentTerm.all then
+                     CurrentState.all := FOLLOWER;
+                     return;
+                  end if;
+
+               end;
+
+            elsif Msg in RequestVoteResponse'Class then
+
+               declare
+
                   MessageSuccess : Boolean :=
                     RequestVoteResponse (Msg).VoteGranted;
                   MessageTerm    : Integer := RequestVoteResponse (Msg).Term;
 
                   NetLenght : Integer := Integer (Net.all.Length);
+
                begin
                   Logger.Log
                     (File_Name => LogFileName,
@@ -411,7 +432,9 @@ package body Node is
                      VotesCounter.all := VotesCounter.all + 1;
 
                      if VotesCounter.all > Integer (NetLenght / 2) then
-                        CurrentState.all := LEADER;
+                        CurrentState.all    := LEADER;
+                        TimeoutDuration.all :=
+                          Integer (TimeoutDuration.all / 2);
 
                         Logger.Log
                           (File_Name => LogFileName,

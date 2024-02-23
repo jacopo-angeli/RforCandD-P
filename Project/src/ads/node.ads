@@ -35,7 +35,7 @@ private
     LastAppendEntryTimestamp : access Time; CurrentTerm : access Integer;
     CurrentState : access State; Log : in out LogEntryVector.Vector;
     CommitIndex              : access Integer; VotedFor : access Integer;
-    VotesCounter             : access Integer);
+    VotesCounter : access Integer; TimeoutDuration : access Integer);
 
   --  Send message to all the other node of the network
   procedure Broadcast
