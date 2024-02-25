@@ -160,11 +160,11 @@ package body Node is
                     --  5. If leaderCommit > commitIndex, set commitIndex =
                     --     min(leaderCommit, index of last new entry)
                     declare
-                        MessageLogEntry          : LogEntry.LogEntry := Msg.LogEntri;
-                        MessageTerm              : Integer := Msg.Term;
-                        MessagePrevLogIndex      : Integer := Msg.PrevLogIndex;
-                       MessageLeaderCommitIndex  : Integer := Msg.LeaderCommit;
-                       MessageLeaderId           : Integer :=  Msg.LeaderId;
+                        MessageLogEntry           : LogEntry.LogEntry := Msg.LogEntri;
+                        MessageTerm               : Integer := Msg.Term;
+                        MessagePrevLogIndex       : Integer := Msg.PrevLogIndex;
+                        MessageLeaderCommitIndex  : Integer := Msg.LeaderCommit;
+                        MessageLeaderId           : Integer :=  Msg.LeaderId;
                     begin
                        Logger.Log
                          (File_Name => LogFileName,
@@ -187,36 +187,35 @@ package body Node is
                               Receiver => MessageLeaderId);
                            return;
                         end if;
-
                         declare
                            Element : LogEntry.LogEntry;
                         begin
-                           Element := Log (MessagePrevLogIndex);
+                           Element := Self.all.Log(MessagePrevLogIndex);
 
                            --  3. If an existing entry conflicts with a new one (same index
                            --     but different terms), delete the existing entry and all that
                            --     follow it (§5.3)
                            if Element.Term /= MessageTerm then
-                              Log.Delete
+                              Self.all.Log.Delete
                                 (Element.Index,
                                  Log.Length -
                                  Ada.Containers.Count_Type (Element.Index));
                            end if;
 
                            --  4. Append any new entries not already in the log
-                           LogEntryVector.Append (Log, MessageLogEntry);
+                           LogEntryVector.Append (Self.all.Log, MessageLogEntry);
 
                            --  5. If leaderCommit > commitIndex, set commitIndex =
                            --     min(leaderCommit, index of last new entry)
-                           CommitIndex.all :=
+                           Self.all.CommitIndex:=
                              Integer'Min
                                (MessageLeaderCommitIndex, MessageLogEntry.Index);
 
-                           SendToId
+                           Respond
                              (Net      => Net,
                               Msg      =>
                                 Message.AppendEntryResponse'
-                                  (Term => CurrentTerm.all, Success => True),
+                                  (Term => Self.all.CurrentTerm, Success => True),
                               Receiver => MessageLeaderId);
                         end;
                      end;
