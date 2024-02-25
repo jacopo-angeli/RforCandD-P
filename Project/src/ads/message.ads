@@ -1,7 +1,7 @@
 with LogEntry;
 with Ada.Containers;
 package Message is
-    type Message is tagged null record;
+    type Message is abstract tagged null record;
     --  AppendEntries RPC
     type AppendEntry is new Message with record
         --  Leader’s term

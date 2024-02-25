@@ -18,7 +18,7 @@ package body Node is
 
     task body Node is
 
-        Self : NodeState := NodeStateInit;
+        Self : aliased NodeState := NodeStateInit;
 
         --  Log
         LogFileName : constant String :=
@@ -37,8 +37,9 @@ package body Node is
                     delay 1.0;
                 end loop;
                 --  Clear of all the received message while in crash state
-                Queue.Clear(Net.all (Id));
-                Self.all.CurrentType := FOLLOWER;
+                Queue.Clear (Net.all (Id).all);
+                --  Current type to FOLLOWER
+                Self.CurrentType := FOLLOWER;
                 Logger.Log (LogFileName, "Node up.");
             end if;
 
@@ -51,12 +52,11 @@ package body Node is
             end loop;
 
             --  TimeoutMangment
-            TimeoutManagment (Net, Self'Access);
+            TimeoutManagment (Id, Net, Self'Access);
 
             delay 0.3;
             null;
         end loop;
-        null;
     end Node;
 
     --------------------------------------------------------------------------- FUNCTIONS
@@ -120,52 +120,76 @@ package body Node is
     procedure HandleMessage
        (Net  : access QueueVector.Vector;--
         Self : access NodeState; --
+        Msg  : Message.Message'Class)
+    is
+    begin
+        if Msg in Message.AppendEntry'Class then
+            HandleAppendEntry (Net, Self, Message.AppendEntry (Msg));
+        elsif Msg in Message.AppendEntryResponse'Class then
+            HandleAppendEntryResponse
+               (Net, Self, Message.AppendEntryResponse (Msg));
+        elsif Msg in Message.RequestVote'Class then
+            HandleRequestVote (Net, Self, Message.RequestVote (Msg));
+        elsif Msg in Message.RequestVoteResponse'Class then
+            HandleRequestVoteResponse
+               (Net, Self, Message.RequestVoteResponse (Msg));
+        end if;
+    end HandleMessage;
+
+    procedure HandleAppendEntry
+       (Net  : access QueueVector.Vector;--
+        Self : access NodeState; --
         Msg  : Message.AppendEntry)
     is
     begin
         null;
-    end HandleMessage;
+    end HandleAppendEntry;
 
-    procedure HandleMessage
+    procedure HandleAppendEntryResponse
        (Net  : access QueueVector.Vector;--
         Self : access NodeState;--
         Msg  : Message.AppendEntryResponse)
     is
     begin
         null;
-    end HandleMessage;
+    end HandleAppendEntryResponse;
 
-    procedure HandleMessage
+    procedure HandleRequestVote
        (Net  : access QueueVector.Vector;--
         Self : access NodeState; --
         Msg  : Message.RequestVote)
     is
     begin
         null;
-    end HandleMessage;
+    end HandleRequestVote;
 
-    procedure HandleMessage
+    procedure HandleRequestVoteResponse
        (Net  : access QueueVector.Vector;--
         Self : access NodeState; --
         Msg  : Message.RequestVoteResponse)
     is
     begin
         null;
-    end HandleMessage;
+    end HandleRequestVoteResponse;
 
     procedure TimeoutManagment
-       (Net  : access QueueVector.Vector;--
+       (Id   : Integer;--
+        Net  : access QueueVector.Vector;--
         Self : access NodeState)
     is
         CurrentState             : NodeType := Self.all.CurrentType;
         ElectionTimeoutDuration  : Integer := Self.all.ElectionTimeoutDuration;
         HeartbeatTimeoutDuration : Integer := Self.all.ElectionTimeoutDuration;
-        LastPacketTimestamp      : Clock    := Self.all.LastPacketTimestamp;
+        LastPacketTimestamp      : Time     := Self.all.LastPacketTimestamp;
+        CandidationTimestamp     : Time     := Self.all.CandidationTimestamp;
 
         TimeSpanFromLastHeartbeat : Integer :=
            Integer (To_Duration (Clock - LastPacketTimestamp)) * 1_000;
         TimeSpanFromCandidation   : Integer :=
            Integer (To_Duration (Clock - CandidationTimestamp)) * 1_000;
+
+        LogFileName : constant String :=
+           "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
     begin
 
         if (CurrentState = LEADER) then
@@ -178,20 +202,25 @@ package body Node is
 
                     EmptyEntry : LogEntry.LogEntry :=
                        LogEntry.LogEntry'
-                          (Term    => CurrentTerm, Index => LastApplied,
+                          (Term    => Self.all.CurrentTerm,--
+                           Index   => Self.all.LastApplied, --
                            Peyload => Payload.EmptyPayload);
+
+                    PrevLogTerm : Integer :=
+                       Self.all.Log (Self.all.LastApplied).Term;
 
                     MessageToSend : Message.AppendEntry :=
                        Message.AppendEntry'
-                          (Term         => CurrentTerm, LeaderId => Id,
-                           PrevLogIndex => LastApplied,
-                           PrevLogTerm  => Log (LastApplied).Term,
-                           LogEntri     => EmptyEntry,
-                           LeaderCommit => CommitIndex);
+                          (Term         => Self.all.CurrentTerm,--
+                           LeaderId     => Id,--
+                           PrevLogIndex => Self.all.LastApplied,--
+                           PrevLogTerm  => PrevLogTerm,--
+                           LogEntri     => EmptyEntry,--
+                           LeaderCommit => Self.all.CommitIndex);
 
                 begin
 
-                    Broadcast (Id => Id, Net => Net, Msg => MessageToSend);
+                    Broadcast (Id, Net, MessageToSend);
 
                 end;
 
@@ -218,13 +247,15 @@ package body Node is
                 Self.all.VotesCounter         := 1;
                 Self.all.CandidationTimestamp := Clock;
                 Broadcast
-                   (Id  => Id, Net => Net,
-                    Msg =>
-                       Message.RequestVote'
-                          (Term         => CurrentTerm,--
-                           CandidateId  => Id,--
-                           LastLogIndex => Log (Log.Last_Index).Index,--
-                           LastLogTerm  => Log (Log.Last_Index).Term));
+                   (Id,--
+                    Net,--
+                    Message.RequestVote'
+                       (Term         => Self.all.CurrentTerm,--
+                        CandidateId  => Id,--
+                        LastLogIndex =>
+                           Self.all.Log (Self.all.Log.Last_Index).Index,--
+                        LastLogTerm  =>
+                           Self.all.Log (Self.all.Log.Last_Index).Term));
 
                 Logger.Log
                    (File_Name => LogFileName,--
@@ -235,18 +266,21 @@ package body Node is
 
         if (CurrentState = CANDIDATE) then
             --  • If election timeout elapses: start new election
-            if TimeSpanFromCandidation > TimeoutDuration then
+            if TimeSpanFromCandidation > Self.all.ElectionTimeoutDuration then
                 --  TODO : Think of change all this if content to a CurrentType := FOLLOWER
-                CurrentTerm          := CurrentTerm + 1;
-                VotesCounter         := 1;
-                CandidationTimestamp := Clock;
+                Self.all.CurrentTerm          := Self.all.CurrentTerm + 1;
+                Self.all.VotesCounter         := 1;
+                Self.all.CandidationTimestamp := Clock;
                 Broadcast
-                   (Id  => Id, Net => Net,
-                    Msg =>
-                       Message.RequestVote'
-                          (Term         => CurrentTerm, CandidateId => Id,
-                           LastLogIndex => Log (Log.Last_Index).Index,
-                           LastLogTerm  => Log (Log.Last_Index).Term));
+                   (Id,--
+                    Net,--
+                    Message.RequestVote'
+                       (Term         => Self.all.CurrentTerm,--
+                        CandidateId  => Id,--
+                        LastLogIndex =>
+                           Self.all.Log (Self.all.Log.Last_Index).Index,--
+                        LastLogTerm  =>
+                           Self.all.Log (Self.all.Log.Last_Index).Term));
                 Logger.Log
                    (File_Name => LogFileName, Content => "Requested vote...");
             end if;

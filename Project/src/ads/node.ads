@@ -83,15 +83,32 @@ private
   -- NodeState init function
   function NodeStateInit return NodeState;
 
-  --  Polymorphic Handle message procedure
+  --  Handle message procedures
   procedure HandleMessage
    (Net  : access QueueVector.Vector;--
     Self : access NodeState; --
-    Msg  : Message.Message'Class) is abstract;
+    Msg  : Message.Message'Class);
+  procedure HandleAppendEntry
+   (Net  : access QueueVector.Vector;--
+    Self : access NodeState; --
+    Msg  : Message.AppendEntry);
+  procedure HandleAppendEntryResponse
+   (Net  : access QueueVector.Vector;--
+    Self : access NodeState; --
+    Msg  : Message.AppendEntryResponse);
+  procedure HandleRequestVote
+   (Net  : access QueueVector.Vector;--
+    Self : access NodeState; --
+    Msg  : Message.RequestVote);
+  procedure HandleRequestVoteResponse
+   (Net  : access QueueVector.Vector;--
+    Self : access NodeState; --
+    Msg  : Message.RequestVoteResponse);
 
   --  Broadcast procedure
   procedure Broadcast
-   (SelfId : Integer; Net : access QueueVector.Vector;
+   (SelfId : Integer;--
+    Net    : access QueueVector.Vector;--
     Msg    : Message.Message'Class);
 
   --  Send a message to a specific node using its Id
@@ -102,7 +119,8 @@ private
 
   --  Timeout managment
   procedure TimeoutManagment
-   (Net  : access QueueVector.Vector;--
+   (Id   : Integer;--
+    Net  : access QueueVector.Vector;--
     Self : access NodeState);
 
   --  procedure HandleMessage

@@ -15,6 +15,7 @@ package Queue is
     end record;
 
     procedure Enqueue (Q : in out Queue; Msg : in Message.Message'Class);
+    procedure Clear (Q : in out Queue);
     function Dequeue (Q : in out Queue) return Message.Message'Class;
     function Length (Q: in Queue) return Ada.Containers.Count_Type;
     function Is_Empty (Q : Queue) return Boolean;

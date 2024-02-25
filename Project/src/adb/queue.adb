@@ -50,4 +50,9 @@ package body Queue is
         return Vector_Ptrs.Length(Q.Data);
     end Length;
 
+    procedure Clear(Q: in out Queue)is
+    begin
+        Vector_Ptrs.Clear(Q.data);
+    end;
+
 end Queue;
