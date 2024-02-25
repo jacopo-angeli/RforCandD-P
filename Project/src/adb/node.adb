@@ -117,7 +117,8 @@ package body Node is
     end Respond;
 
     procedure HandleMessage
-       (Net  : access QueueVector.Vector;--
+       (Id   : Integer; --
+        Net  : access QueueVector.Vector;--
         Self : access NodeState; --
         Msg  : Message.Message'Class)
     is
@@ -136,7 +137,8 @@ package body Node is
     end HandleMessage;
 
     procedure HandleAppendEntry
-       (Net  : access QueueVector.Vector;--
+       (Id   : Integer; --
+        Net  : access QueueVector.Vector;--
         Self : access NodeState; --
         Msg  : Message.AppendEntry)
     is
@@ -152,14 +154,15 @@ package body Node is
     end HandleAppendEntry;
 
     procedure HandleAppendEntryResponse
-       (Net  : access QueueVector.Vector;--
+       (Id   : Integer; --
+        Net  : access QueueVector.Vector;--
         Self : access NodeState;--
         Msg  : Message.AppendEntryResponse)
     is
     begin
         case Self.all.CurrentType is
             when FOLLOWER =>
-                null;
+
             when CANDIDATE =>
                 null;
             when LEADER =>
@@ -168,14 +171,92 @@ package body Node is
     end HandleAppendEntryResponse;
 
     procedure HandleRequestVote
-       (Net  : access QueueVector.Vector;--
+       (Id   : Integer; --
+        Net  : access QueueVector.Vector;--
         Self : access NodeState; --
         Msg  : Message.RequestVote)
     is
+        --  Logger
+        LogFileName : constant String :=
+           "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
     begin
         case Self.all.CurrentType is
             when FOLLOWER =>
-                null;
+                declare
+
+                    MessageTerm         : Integer := Msg.Term;
+                    MessageCandidateId  : Integer := Msg.CandidateId;
+                    MessageLastLogIndex : Integer := Msg.LastLogIndex;
+                    MessageLastLogTerm  : Integer := Msg.LastLogTerm;
+
+                begin
+
+                    if MessageTerm > Self.all.CurrentTerm then
+                        Self.all.CurrentTerm  := MessageTerm;
+                        Self.all.VotedFor.all := -1;
+                    end if;
+
+                    Logger.Log
+                       (File_Name => LogFileName,
+                        Content   =>
+                           "(" & Integer'Image (CurrentTerm.all) &
+                           ") : Request vote from " &
+                           Integer'Image (MessageCandidateId) & " with term " &
+                           Integer'Image (MessageTerm));
+
+                    --  1. Reply false if term < currentTerm (§5.1)
+                    if MessageTerm < CurrentTerm.all then
+                        SendToId
+                           (Net      => Net,
+                            Msg      =>
+                               Message.RequestVoteResponse'
+                                  (Term        => CurrentTerm.all,
+                                   VoteGranted => False),
+                            Receiver => MessageCandidateId);
+                        return;
+                    end if;
+
+                    declare
+                        LastLogElement : LogEntry.LogEntry;
+                    begin
+                        LastLogElement := Log (Log.Last_Index);
+
+                        --  2. If votedFor is null or candidateId, and candidate’s log is at
+                        --     least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
+                        if (VotedFor.all = -1 or
+                            VotedFor.all = MessageCandidateId) and
+                           (LastLogElement.Index <= MessageLastLogIndex and
+                            LastLogElement.Term <= MessageLastLogTerm)
+                        then
+                            SendToId
+                               (Net      => Net,
+                                Msg      =>
+                                   Message.RequestVoteResponse'
+                                      (Term        => CurrentTerm.all,
+                                       VoteGranted => True),
+                                Receiver => MessageCandidateId);
+
+                            VotedFor.all := MessageCandidateId;
+
+                            Logger.Log
+                               (File_Name => LogFileName,
+                                Content   =>
+                                   "Vote granted to " &
+                                   Integer'Image (MessageCandidateId));
+                            return;
+
+                        else
+                            SendToId
+                               (Net      => Net,
+                                Msg      =>
+                                   Message.RequestVoteResponse'
+                                      (Term        => CurrentTerm.all,
+                                       VoteGranted => False),
+                                Receiver => MessageCandidateId);
+                        end if;
+
+                    end;
+                end;
             when CANDIDATE =>
                 null;
             when LEADER =>
@@ -184,16 +265,40 @@ package body Node is
     end HandleRequestVote;
 
     procedure HandleRequestVoteResponse
-       (Net  : access QueueVector.Vector;--
+       (Id   : Integer; --
+        Net  : access QueueVector.Vector;--
         Self : access NodeState; --
         Msg  : Message.RequestVoteResponse)
     is
+        LogFileName : constant String :=
+           "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
     begin
         case Self.all.CurrentType is
             when FOLLOWER =>
                 null;
             when CANDIDATE =>
-                null;
+                declare
+
+                    MessageSuccess : Boolean := Msg.VoteGranted;
+                    MessageTerm    : Integer := Msg.Term;
+
+                    NetLenght : Integer := Integer (Net.all.Length);
+
+                begin
+                    Logger.Log
+                       (LogFileName,
+                        "Voted received:" & Boolean'Image (MessageSuccess));
+
+                    if MessageSuccess then
+                        Self.all.VotesCounter := Self.all.VotesCounter + 1;
+
+                        if Self.all.VotesCounter > Integer (NetLenght / 2) then
+                            Self.all.CurrentState := LEADER;
+                            Logger.Log (LogFileName, "Now leader.");
+                        end if;
+
+                    end if;
+                end;
             when LEADER =>
                 null;
         end case;
@@ -552,34 +657,7 @@ package body Node is
 
     --              elsif Msg in RequestVoteResponse'Class then
 
-    --                 declare
-
-    --                    MessageSuccess : Boolean :=
-    --                      RequestVoteResponse (Msg).VoteGranted;
-    --                    MessageTerm    : Integer := RequestVoteResponse (Msg).Term;
-
-    --                    NetLenght : Integer := Integer (Net.all.Length);
-
-    --                 begin
-    --                    Logger.Log
-    --                      (File_Name => LogFileName,
-    --                       Content   =>
-    --                         "Voted received:" & Boolean'Image (MessageSuccess));
-    --                    if MessageSuccess then
-    --                       VotesCounter.all := VotesCounter.all + 1;
-
-    --                       if VotesCounter.all > Integer (NetLenght / 2) then
-    --                          CurrentState.all    := LEADER;
-    --                          TimeoutDuration.all :=
-    --                            Integer (TimeoutDuration.all / 2);
-
-    --                          Logger.Log
-    --                            (File_Name => LogFileName,
-    --                             Content   => "Now LEADER...");
-    --                       end if;
-
-    --                    end if;
-    --                 end;
+    --
     --              else
     --                 --  TODO : Theoretically impossible
     --                 null;
