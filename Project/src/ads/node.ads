@@ -85,23 +85,28 @@ private
 
   --  Handle message procedures
   procedure HandleMessage
-   (Net  : access QueueVector.Vector;--
+   (Id   : Integer; --
+    Net  : access QueueVector.Vector;--
     Self : access NodeState; --
     Msg  : Message.Message'Class);
   procedure HandleAppendEntry
-   (Net  : access QueueVector.Vector;--
+   (Id   : Integer; --
+    Net  : access QueueVector.Vector;--
     Self : access NodeState; --
     Msg  : Message.AppendEntry);
   procedure HandleAppendEntryResponse
-   (Net  : access QueueVector.Vector;--
+   (Id   : Integer; --
+    Net  : access QueueVector.Vector;--
     Self : access NodeState; --
     Msg  : Message.AppendEntryResponse);
   procedure HandleRequestVote
-   (Net  : access QueueVector.Vector;--
+   (Id   : Integer; --
+    Net  : access QueueVector.Vector;--
     Self : access NodeState; --
     Msg  : Message.RequestVote);
   procedure HandleRequestVoteResponse
-   (Net  : access QueueVector.Vector;--
+   (Id   : Integer; --
+    Net  : access QueueVector.Vector;--
     Self : access NodeState; --
     Msg  : Message.RequestVoteResponse);
 
