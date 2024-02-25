@@ -1,5 +1,5 @@
 #!/bin/bash
+rm -f ./logs/*
 echo "🗑️  - Cleared logs files."
-rm logs/*
 echo "🚀 - Running..."
 ./bin/main

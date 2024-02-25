@@ -46,7 +46,8 @@ package body Node is
             --  Message handle
             while not Queue.Is_Empty (Net.all (id).all) loop
                 HandleMessage
-                   (Net,--
+                   (Id,--
+                    Net,--
                     Self'Access,--
                     Queue.Dequeue (Net.all (Id).all));
             end loop;
@@ -54,7 +55,6 @@ package body Node is
             --  TimeoutMangment
             TimeoutManagment (Id, Net, Self'Access);
 
-            delay 0.3;
             null;
         end loop;
     end Node;
@@ -72,6 +72,7 @@ package body Node is
 
         -- Timeout duration in milliseconds
         T := (Integer_Random.Random (Gen) mod 10 + 3) * 1_000;
+        Put_Line(Integer'Image(T));
 
         return
            NodeState'
@@ -124,15 +125,15 @@ package body Node is
     is
     begin
         if Msg in Message.AppendEntry'Class then
-            HandleAppendEntry (Net, Self, Message.AppendEntry (Msg));
+            HandleAppendEntry (Id, Net, Self, Message.AppendEntry (Msg));
         elsif Msg in Message.AppendEntryResponse'Class then
             HandleAppendEntryResponse
-               (Net, Self, Message.AppendEntryResponse (Msg));
+               (Id, Net, Self, Message.AppendEntryResponse (Msg));
         elsif Msg in Message.RequestVote'Class then
-            HandleRequestVote (Net, Self, Message.RequestVote (Msg));
+            HandleRequestVote (Id, Net, Self, Message.RequestVote (Msg));
         elsif Msg in Message.RequestVoteResponse'Class then
             HandleRequestVoteResponse
-               (Net, Self, Message.RequestVoteResponse (Msg));
+               (Id, Net, Self, Message.RequestVoteResponse (Msg));
         end if;
     end HandleMessage;
 
@@ -142,13 +143,144 @@ package body Node is
         Self : access NodeState; --
         Msg  : Message.AppendEntry)
     is
+        --  Logger
+        LogFileName : constant String :=
+           "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
     begin
         case Self.all.CurrentType is
             when FOLLOWER =>
-                null;
+                Self.all.LastPacketTimestamp := Clock;
+
+                --  1. Reply false if term < currentTerm (§5.1)
+                --  2. Reply false if log doesn’t contain an entry at prevLogIndex
+                --     whose term matches prevLogTerm (§5.3)
+                --  3. If an existing entry conflicts with a new one (same index
+                --     but different terms), delete the existing entry and all that
+                --     follow it (§5.3)
+                --  4. Append any new entries not already in the log
+                --  5. If leaderCommit > commitIndex, set commitIndex =
+                --     min(leaderCommit, index of last new entry)
+
+                declare
+                    MessageLogEntry : LogEntry.LogEntry := Msg.LogEntri;
+
+                    MessageTerm              : Integer := Msg.Term;
+                    MessagePrevLogIndex      : Integer := Msg.PrevLogIndex;
+                    MessageLeaderCommitIndex : Integer := Msg.LeaderCommit;
+                    MessageLeaderId          : Integer := Msg.LeaderId;
+                begin
+                    Logger.Log
+                       (LogFileName, --
+                        "Follower and received message AppendEntry (" &
+                        Integer'Image (MessageTerm) & "," &
+                        Integer'Image (MessageLeaderId) & ")");
+
+                    if MessageTerm > Self.all.CurrentTerm then
+                        Self.all.CurrentTerm := MessageTerm;
+                        Self.all.VotedFor    := -1;
+                    end if;
+
+                    --  1. Reply false if term < currentTerm (§5.1)
+                    if MessageTerm < Self.all.CurrentTerm then
+                        Respond
+                           (Net, --
+                            Message.AppendEntryResponse'
+                               (Self.all.CurrentTerm,--
+                                False),--
+                            MessageLeaderId);
+                        return;
+                    end if;
+
+                    declare
+                        Element : LogEntry.LogEntry :=
+                           Self.all.Log (MessagePrevLogIndex);
+                    begin
+
+                        --  3. If an existing entry conflicts with a new one (same index
+                        --     but different terms), delete the existing entry and all that
+                        --     follow it (§5.3)
+                        if Element.Term /= MessageTerm then
+                            Self.all.Log.Delete
+                               (Element.Index,
+                                Self.all.Log.Length -
+                                Ada.Containers.Count_Type (Element.Index));
+                        end if;
+
+                        --  4. Append any new entries not already in the log
+                        LogEntryVector.Append (Self.all.Log, MessageLogEntry);
+
+                        --  5. If leaderCommit > commitIndex, set commitIndex =
+                        --     min(leaderCommit, index of last new entry)
+                        Self.all.CommitIndex :=
+                           Integer'Min
+                              (MessageLeaderCommitIndex,
+                               MessageLogEntry.Index);
+
+                        Respond
+                           (Net,
+                            Message.AppendEntryResponse'
+                               (Self.all.CurrentTerm, True),
+                            MessageLeaderId);
+
+                    end;
+
+                end;
             when CANDIDATE =>
-                null;
+                --  If the leader’s term (included in its RPC) is at least
+                --  as large as the candidate’s current term, then the candidate
+                --  recognizes the leader as legitimate and returns to follower
+                --  state.
+                declare
+
+                    MessageLogEntry : LogEntry.LogEntry := Msg.LogEntri;
+
+                    MessageTerm              : Integer := Msg.Term;
+                    MessagePrevLogIndex      : Integer := Msg.PrevLogIndex;
+                    MessageLeaderCommitIndex : Integer := Msg.LeaderCommit;
+                    MessageLeaderId          : Integer := Msg.LeaderId;
+
+                begin
+
+                    Logger.Log
+                       (LogFileName,
+                        "Candidate and received message AppendEntry (" &
+                        Integer'Image (MessageTerm) & "," &
+                        Integer'Image (MessageLeaderId) & ")");
+
+                    --  If AppendEntries RPC received from new leader: convert to follower
+                    --  if MessageTerm > CurrentTerm.all then
+                    --     CurrentTerm.all  := MessageTerm;
+                    --     VotedFor.all     := -1;
+                    --     CurrentState.all := FOLLOWER;
+                    --     Logger.Log
+                    --       (File_Name => LogFileName,
+                    --        Content   =>
+                    --          "AppendEntries RPC received from new leader: convert to follower.");
+                    --     return;
+                    --  end if;
+                    Self.all.CurrentType         := FOLLOWER;
+                    Self.all.LastPacketTimestamp := Clock;
+
+                end;
             when LEADER =>
+                declare
+
+                    MessageTerm     : Integer := AppendEntry (Msg).Term;
+                    MessageLeaderId : Integer := AppendEntry (Msg).LeaderId;
+                    NetLenght       : Integer := Integer (Net.all.Length);
+
+                begin
+
+                    Logger.Log
+                       (LogFileName,
+                        "Candidate and received message AppendEntry (" &
+                        Integer'Image (MessageTerm) & "," &
+                        Integer'Image (MessageLeaderId) & ")");
+
+                    Self.all.CurrentTerm         := MessageTerm;
+                    Self.all.CurrentType         := FOLLOWER;
+                    Self.all.LastPacketTimestamp := Clock;
+                end;
                 null;
         end case;
     end HandleAppendEntry;
@@ -162,7 +294,7 @@ package body Node is
     begin
         case Self.all.CurrentType is
             when FOLLOWER =>
-
+                null;
             when CANDIDATE =>
                 null;
             when LEADER =>
@@ -192,51 +324,48 @@ package body Node is
                 begin
 
                     if MessageTerm > Self.all.CurrentTerm then
-                        Self.all.CurrentTerm  := MessageTerm;
-                        Self.all.VotedFor.all := -1;
+                        Self.all.CurrentTerm := MessageTerm;
+                        Self.all.VotedFor    := -1;
                     end if;
 
                     Logger.Log
                        (File_Name => LogFileName,
                         Content   =>
-                           "(" & Integer'Image (CurrentTerm.all) &
+                           "(" & Integer'Image (Self.all.CurrentTerm) &
                            ") : Request vote from " &
                            Integer'Image (MessageCandidateId) & " with term " &
                            Integer'Image (MessageTerm));
 
                     --  1. Reply false if term < currentTerm (§5.1)
-                    if MessageTerm < CurrentTerm.all then
-                        SendToId
-                           (Net      => Net,
-                            Msg      =>
-                               Message.RequestVoteResponse'
-                                  (Term        => CurrentTerm.all,
-                                   VoteGranted => False),
-                            Receiver => MessageCandidateId);
+                    if MessageTerm < Self.all.CurrentTerm then
+                        Respond
+                           (Net,
+                            Message.RequestVoteResponse'
+                               (Self.all.CurrentTerm, False),
+                            MessageCandidateId);
                         return;
                     end if;
 
                     declare
-                        LastLogElement : LogEntry.LogEntry;
+                        LastLogElement : LogEntry.LogEntry :=
+                           Self.all.Log (Self.all.Log.Last_Index);
                     begin
-                        LastLogElement := Log (Log.Last_Index);
 
                         --  2. If votedFor is null or candidateId, and candidate’s log is at
                         --     least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
-                        if (VotedFor.all = -1 or
-                            VotedFor.all = MessageCandidateId) and
+                        if (Self.all.VotedFor = -1 or
+                            Self.all.VotedFor = MessageCandidateId) and
                            (LastLogElement.Index <= MessageLastLogIndex and
                             LastLogElement.Term <= MessageLastLogTerm)
                         then
-                            SendToId
-                               (Net      => Net,
-                                Msg      =>
-                                   Message.RequestVoteResponse'
-                                      (Term        => CurrentTerm.all,
-                                       VoteGranted => True),
-                                Receiver => MessageCandidateId);
+                            Respond
+                               (Net,
+                                Message.RequestVoteResponse'
+                                   (Term        => Self.all.CurrentTerm,
+                                    VoteGranted => True),
+                                MessageCandidateId);
 
-                            VotedFor.all := MessageCandidateId;
+                            Self.all.VotedFor := MessageCandidateId;
 
                             Logger.Log
                                (File_Name => LogFileName,
@@ -246,11 +375,11 @@ package body Node is
                             return;
 
                         else
-                            SendToId
+                            Respond
                                (Net      => Net,
                                 Msg      =>
                                    Message.RequestVoteResponse'
-                                      (Term        => CurrentTerm.all,
+                                      (Term        => Self.all.CurrentTerm,
                                        VoteGranted => False),
                                 Receiver => MessageCandidateId);
                         end if;
@@ -293,7 +422,7 @@ package body Node is
                         Self.all.VotesCounter := Self.all.VotesCounter + 1;
 
                         if Self.all.VotesCounter > Integer (NetLenght / 2) then
-                            Self.all.CurrentState := LEADER;
+                            Self.all.CurrentType := LEADER;
                             Logger.Log (LogFileName, "Now leader.");
                         end if;
 
@@ -419,281 +548,5 @@ package body Node is
         end if;
 
     end TimeoutManagment;
-
-    --     procedure SendToId
-    --       (Net      : access QueueVector.Vector; Msg : Message.Message'Class;
-    --        Receiver : Integer)
-    --     is
-    --     begin
-    --        Queue.Enqueue (net.all (Receiver).all, Msg);
-
-    --     end SendToId;
-
-    --     procedure HandleMessage
-    --       (Net             :        access QueueVector.Vector; Id : Integer;
-    --        Msg :    Message.Message'Class; LastAppendEntryTimestamp : access Time;
-    --        CurrentTerm     :        access Integer; CurrentState : access State;
-    --        Log : in out LogEntryVector.Vector; CommitIndex : access Integer;
-    --        VotedFor        :        access Integer; VotesCounter : access Integer;
-    --        TimeoutDuration :        access Integer)
-    --     is
-    --        LogFileName : constant String :=
-    --          "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
-    --     begin
-
-    --        case CurrentState.all is
-
-    --           when FOLLOWER =>
-    --              if Msg in AppendEntry'Class then
-
-    --                 LastAppendEntryTimestamp.all := Clock;
-
-    --                 --  1. Reply false if term < currentTerm (§5.1)
-    --                 --  2. Reply false if log doesn’t contain an entry at prevLogIndex
-    --                 --     whose term matches prevLogTerm (§5.3)
-    --                 --  3. If an existing entry conflicts with a new one (same index
-    --                 --     but different terms), delete the existing entry and all that
-    --                 --     follow it (§5.3)
-    --                 --  4. Append any new entries not already in the log
-    --                 --  5. If leaderCommit > commitIndex, set commitIndex =
-    --                 --     min(leaderCommit, index of last new entry)
-
-    --                 declare
-    --                    MessageLogEntry          : LogEntry.LogEntry :=
-    --                      AppendEntry (Msg).LogEntri;
-    --                    MessageTerm              : Integer := AppendEntry (Msg).Term;
-    --                    MessagePrevLogIndex      : Integer           :=
-    --                      AppendEntry (Msg).PrevLogIndex;
-    --                    MessageLeaderCommitIndex : Integer           :=
-    --                      AppendEntry (Msg).LeaderCommit;
-    --                    MessageLeaderId : Integer := AppendEntry (Msg).LeaderId;
-    --                 begin
-    --                    Logger.Log
-    --                      (File_Name => LogFileName,
-    --                       Content   =>
-    --                         "Follower and received message AppendEntry (" &
-    --                         Integer'Image (MessageTerm) & "," &
-    --                         Integer'Image (MessageLeaderId) & ")");
-
-    --                    if MessageTerm > CurrentTerm.all then
-    --                       CurrentTerm.all := MessageTerm;
-    --                       VotedFor.all    := -1;
-    --                    end if;
-
-    --                    --  1. Reply false if term < currentTerm (§5.1)
-    --                    if MessageTerm < CurrentTerm.all then
-    --                       SendToId
-    --                         (Net      => Net,
-    --                          Msg      =>
-    --                            Message.AppendEntryResponse'
-    --                              (Term => CurrentTerm.all, Success => False),
-    --                          Receiver => MessageLeaderId);
-    --                       return;
-    --                    end if;
-
-    --                    declare
-    --                       Element : LogEntry.LogEntry;
-    --                    begin
-    --                       Element := Log (MessagePrevLogIndex);
-
-    --                       --  3. If an existing entry conflicts with a new one (same index
-    --                       --     but different terms), delete the existing entry and all that
-    --                       --     follow it (§5.3)
-    --                       if Element.Term /= MessageTerm then
-    --                          Log.Delete
-    --                            (Element.Index,
-    --                             Log.Length -
-    --                             Ada.Containers.Count_Type (Element.Index));
-    --                       end if;
-
-    --                       --  4. Append any new entries not already in the log
-    --                       LogEntryVector.Append (Log, MessageLogEntry);
-
-    --                       --  5. If leaderCommit > commitIndex, set commitIndex =
-    --                       --     min(leaderCommit, index of last new entry)
-    --                       CommitIndex.all :=
-    --                         Integer'Min
-    --                           (MessageLeaderCommitIndex, MessageLogEntry.Index);
-
-    --                       SendToId
-    --                         (Net      => Net,
-    --                          Msg      =>
-    --                            Message.AppendEntryResponse'
-    --                              (Term => CurrentTerm.all, Success => True),
-    --                          Receiver => MessageLeaderId);
-
-    --                    end;
-
-    --                 end;
-
-    --              elsif Msg in RequestVote'Class then
-
-    --                 --  1. Reply false if term < currentTerm (§5.1)
-    --                 --  2. If votedFor is null or candidateId, and candidate’s log is at
-    --                 --     least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
-
-    --                 declare
-
-    --                    MessageTerm         : Integer := RequestVote (Msg).Term;
-    --                    MessageCandidateId  : Integer :=
-    --                      RequestVote (Msg).CandidateId;
-    --                    MessageLastLogIndex : Integer :=
-    --                      RequestVote (Msg).LastLogIndex;
-    --                    MessageLastLogTerm  : Integer :=
-    --                      RequestVote (Msg).LastLogTerm;
-
-    --                 begin
-    --                    if MessageTerm > CurrentTerm.all then
-    --                       CurrentTerm.all := MessageTerm;
-    --                       VotedFor.all    := -1;
-    --                    end if;
-
-    --                    Logger.Log
-    --                      (File_Name => LogFileName,
-    --                       Content   =>
-    --                         "(" & Integer'Image (CurrentTerm.all) &
-    --                         ") : Request vote from " &
-    --                         Integer'Image (MessageCandidateId) & " with term " &
-    --                         Integer'Image (MessageTerm));
-
-    --                    --  1. Reply false if term < currentTerm (§5.1)
-    --                    if MessageTerm < CurrentTerm.all then
-    --                       SendToId
-    --                         (Net      => Net,
-    --                          Msg      =>
-    --                            Message.RequestVoteResponse'
-    --                              (Term => CurrentTerm.all, VoteGranted => False),
-    --                          Receiver => MessageCandidateId);
-    --                       return;
-    --                    end if;
-
-    --                    declare
-    --                       LastLogElement : LogEntry.LogEntry;
-    --                    begin
-    --                       LastLogElement := Log (Log.Last_Index);
-
-    --                       --  2. If votedFor is null or candidateId, and candidate’s log is at
-    --                       --     least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
-    --                       if
-    --                         (VotedFor.all = -1 or
-    --                          VotedFor.all = MessageCandidateId) and
-    --                         (LastLogElement.Index <= MessageLastLogIndex and
-    --                          LastLogElement.Term <= MessageLastLogTerm)
-    --                       then
-    --                          SendToId
-    --                            (Net      => Net,
-    --                             Msg      =>
-    --                               Message.RequestVoteResponse'
-    --                                 (Term => CurrentTerm.all, VoteGranted => True),
-    --                             Receiver => MessageCandidateId);
-
-    --                          VotedFor.all := MessageCandidateId;
-
-    --                          Logger.Log
-    --                            (File_Name => LogFileName,
-    --                             Content   =>
-    --                               "Vote granted to " &
-    --                               Integer'Image (MessageCandidateId));
-    --                          return;
-
-    --                       else
-    --                          SendToId
-    --                            (Net      => Net,
-    --                             Msg      =>
-    --                               Message.RequestVoteResponse'
-    --                                 (Term => CurrentTerm.all, VoteGranted => False),
-    --                             Receiver => MessageCandidateId);
-    --                       end if;
-
-    --                    end;
-    --                 end;
-
-    --              else
-    --                 --  TODO : Theoretically impossible
-    --                 null;
-    --              end if;
-
-    --           when CANDIDATE =>
-    --              if Msg in AppendEntry'Class then
-    --                 --  If the leader’s term (included in its RPC) is at least
-    --                 --  as large as the candidate’s current term, then the candidate
-    --                 --  recognizes the leader as legitimate and returns to follower
-    --                 --  state.
-    --                 declare
-
-    --                    MessageLogEntry          : LogEntry.LogEntry :=
-    --                      AppendEntry (Msg).LogEntri;
-    --                    MessageTerm              : Integer := AppendEntry (Msg).Term;
-    --                    MessagePrevLogIndex      : Integer           :=
-    --                      AppendEntry (Msg).PrevLogIndex;
-    --                    MessageLeaderCommitIndex : Integer           :=
-    --                      AppendEntry (Msg).LeaderCommit;
-    --                    MessageLeaderId : Integer := AppendEntry (Msg).LeaderId;
-
-    --                 begin
-
-    --                    Logger.Log
-    --                      (File_Name => LogFileName,
-    --                       Content   =>
-    --                         "Candidate and received message AppendEntry (" &
-    --                         Integer'Image (MessageTerm) & "," &
-    --                         Integer'Image (MessageLeaderId) & ")");
-
-    --                    --  If AppendEntries RPC received from new leader: convert to follower
-    --                    --  if MessageTerm > CurrentTerm.all then
-    --                    --     CurrentTerm.all  := MessageTerm;
-    --                    --     VotedFor.all     := -1;
-    --                    --     CurrentState.all := FOLLOWER;
-    --                    --     Logger.Log
-    --                    --       (File_Name => LogFileName,
-    --                    --        Content   =>
-    --                    --          "AppendEntries RPC received from new leader: convert to follower.");
-    --                    --     return;
-    --                    --  end if;
-    --                    CurrentState.all             := FOLLOWER;
-    --                    LastAppendEntryTimestamp.all := Clock;
-
-    --                 end;
-
-    --              elsif Msg in RequestVoteResponse'Class then
-
-    --
-    --              else
-    --                 --  TODO : Theoretically impossible
-    --                 null;
-    --              end if;
-
-    --           when LEADER =>
-    --              if Msg in AppendEntryResponse'Class then
-    --                 --  TODO
-    --                 null;
-    --              elsif Msg in AppendEntry'Class then
-    --                 --  TODO
-    --                 declare
-
-    --                    MessageTerm     : Integer := AppendEntry (Msg).Term;
-    --                    MessageLeaderId : Integer := AppendEntry (Msg).LeaderId;
-    --                    NetLenght       : Integer := Integer (Net.all.Length);
-
-    --                 begin
-
-    --                    Logger.Log
-    --                      (File_Name => LogFileName,
-    --                       Content   =>
-    --                         "Candidate and received message AppendEntry (" &
-    --                         Integer'Image (MessageTerm) & "," &
-    --                         Integer'Image (MessageLeaderId) & ")");
-
-    --                    CurrentTerm.all              := MessageTerm;
-    --                    CurrentState.all             := FOLLOWER;
-    --                    LastAppendEntryTimestamp.all := Clock;
-    --                 end;
-    --                 null;
-    --              else
-    --                 --  TODO : Theoretically impossible
-    --                 null;
-    --              end if;
-    --        end case;
-    --     end HandleMessage;
 
 end Node;
