@@ -73,7 +73,9 @@ package Node is
 
   --  Node and Node pointer
   task type Node
-   (Id : Integer; Net : access QueueVector.Vector; Paused : access Boolean);
+   (Id     : Integer; --
+    Net    : access QueueVector.Vector; --
+    Paused : access Boolean);
   type NodeAccess is access all Node;
 
 private

@@ -10,15 +10,19 @@ with LogEntry;
 with Payload;
 
 package body Node is
-    --     use Ada.Text_IO;
-    --     use Ada.Real_Time;
-    --     use Ada.Strings.Fixed;
-    --     use Message;
-    --     use Ada.Containers;
+    use Ada.Text_IO;
+    use Ada.Real_Time;
+    use Ada.Strings.Fixed;
+    use Message;
+    use Ada.Containers;
 
     task body Node is
 
         Self : NodeState := NodeStateInit;
+
+        --  Log
+        LogFileName : constant String :=
+           "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
 
     begin
 
@@ -33,16 +37,17 @@ package body Node is
                     delay 1.0;
                 end loop;
                 --  Clear of all the received message while in crash state
-                Net.all (Id).Clear;
+                Queue.Clear(Net.all (Id));
+                Self.all.CurrentType := FOLLOWER;
                 Logger.Log (LogFileName, "Node up.");
             end if;
 
             --  Message handle
-            while not Queue.Is_Empty (net.all (id).all) loop
+            while not Queue.Is_Empty (Net.all (id).all) loop
                 HandleMessage
                    (Net,--
                     Self'Access,--
-                    Queue.Dequeue (net.all (Id).all));
+                    Queue.Dequeue (Net.all (Id).all));
             end loop;
 
             --  TimeoutMangment
