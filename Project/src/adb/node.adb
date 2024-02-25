@@ -161,10 +161,10 @@ package body Node is
                     --     min(leaderCommit, index of last new entry)
                     declare
                         MessageLogEntry           : LogEntry.LogEntry := Msg.LogEntri;
-                        MessageTerm               : Integer := Msg.Term;
-                        MessagePrevLogIndex       : Integer := Msg.PrevLogIndex;
-                        MessageLeaderCommitIndex  : Integer := Msg.LeaderCommit;
-                        MessageLeaderId           : Integer :=  Msg.LeaderId;
+                        MessageTerm               : Integer           := Msg.Term;
+                        MessagePrevLogIndex       : Integer           := Msg.PrevLogIndex;
+                        MessageLeaderCommitIndex  : Integer           := Msg.LeaderCommit;
+                        MessageLeaderId           : Integer           :=  Msg.LeaderId;
                     begin
                        Logger.Log
                          (File_Name => LogFileName,
@@ -219,7 +219,7 @@ package body Node is
                               Receiver => MessageLeaderId);
                         end;
                      end;
-            when CANDIDATE =>
+            when CANDIDATE | LEADER =>
                 --  If the leader’s term (included in its RPC) is at least
                 --  as large as the candidate’s current term, then the candidate
                 --  recognizes the leader as legitimate and returns to follower
@@ -254,11 +254,8 @@ package body Node is
                     --  end if;
                     Self.all.CurrentType         := FOLLOWER;
                     Self.all.LastPacketTimestamp := Clock;
-
+                    -- TODO Come mai non guardiamo più il valore del term?
                 end;
-            when LEADER =>
-            null;
-                
         end case;
     end HandleAppendEntry;
 
@@ -275,7 +272,27 @@ package body Node is
             when CANDIDATE =>
                 null;
             when LEADER =>
-                null;
+                declare
+                  Appended_Counter: Integer :=0;
+                  MessageSuccess : Boolean := Msg.Success;
+                  MessageTerm    : Integer := Msg.Term;
+
+                  NetLenght : Integer := Integer (Net.all.Length);
+
+               begin
+                  Logger.Log
+                    (File_Name => LogFileName,
+                     Content   =>
+                       "AppendedEntryResponse received:" & Boolean'Image (MessageSuccess));
+                  if MessageSuccess then
+                     Appended_Counter:= Appended_Counter + 1;
+
+                     if Appended_Counter> Integer (NetLenght / 2) then
+                        --Commit the entry in the log (Update Commit Index)
+                        Self.all.CommitIndex:=Self.all.Log(Self.all.Log.Last_Index).Index;
+                     end if;
+                  end if;
+               end;
         end case;
     end HandleAppendEntryResponse;
 
