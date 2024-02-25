@@ -54,14 +54,13 @@ package Node is
 
     CurrentType : aliased NodeType := FOLLOWER;
 
+    LastPacketTimestamp      : aliased Time := Clock;
     HeartbeatTimeoutDuration : aliased Integer;
-    ElectionTimeoutDuration  : aliased Integer;
     CandidationTimestamp     : Time;
+    ElectionTimeoutDuration  : aliased Integer;
 
     AppendedCounter : aliased Integer := 0;
     VotesCounter    : aliased Integer := 0;
-
-    LastPacketTimestamp : aliased Time := Clock;
 
   end record;
 
@@ -73,20 +72,20 @@ package Node is
   BG : array (1 .. 4) of access Boolean;
 
   --  Node and Node pointer
-  type Node
+  task type Node
    (Id : Integer; Net : access QueueVector.Vector; Paused : access Boolean);
   type NodeAccess is access all Node;
 
-  
 private
 
-  --  Polymorphic Handle message procedures
-  procedure HandleMessage (Self : access NodeState; Msg : Message.AppendEntry);
+  -- NodeState init function
+  function NodeStateInit return NodeState;
+
+  --  Polymorphic Handle message procedure
   procedure HandleMessage
-   (Self : access NodeState; Msg : Message.AppendEntryResponse);
-  procedure HandleMessage (Self : access NodeState; Msg : Message.RequestVote);
-  procedure HandleMessage
-   (Self : access NodeState; Msg : Message.RequestVoteResponse);
+   (Net  : access QueueVector.Vector;--
+    Self : access NodeState; --
+    Msg  : Message.Message'Class) is abstract;
 
   --  Broadcast procedure
   procedure Broadcast
@@ -95,8 +94,14 @@ private
 
   --  Send a message to a specific node using its Id
   procedure Respond
-   (Net      : access QueueVector.Vector; Msg : Message.Message'Class;
+   (Net      : access QueueVector.Vector;--
+    Msg      : Message.Message'Class;--
     Receiver : Integer);
+
+  --  Timeout managment
+  procedure TimeoutManagment
+   (Net  : access QueueVector.Vector;--
+    Self : access NodeState);
 
   --  procedure HandleMessage
   --   (Net : access QueueVector.Vector; Id : Integer; Msg : Message.Message'Class;
