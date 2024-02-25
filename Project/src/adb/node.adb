@@ -143,11 +143,82 @@ package body Node is
     begin
         case Self.all.CurrentType is
             when FOLLOWER =>
-                null;
+                  Self.all.LastPacketTimestamp := Clock;
+                    --  1. Reply false if term < currentTerm (§5.1)
+                    --  2. Reply false if log doesn’t contain an entry at prevLogIndex
+                    --     whose term matches prevLogTerm (§5.3)
+                    --  3. If an existing entry conflicts with a new one (same index
+                    --     but different terms), delete the existing entry and all that
+                    --     follow it (§5.3)
+                    --  4. Append any new entries not already in the log
+                    --  5. If leaderCommit > commitIndex, set commitIndex =
+                    --     min(leaderCommit, index of last new entry)
+                    declare
+                        MessageLogEntry          : LogEntry.LogEntry := Msg.LogEntri;
+                        MessageTerm              : Integer := Msg.Term;
+                        MessagePrevLogIndex      : Integer := Msg.PrevLogIndex;
+                       MessageLeaderCommitIndex  : Integer := Msg.LeaderCommit;
+                       MessageLeaderId           : Integer :=  Msg.LeaderId;
+                    begin
+                       Logger.Log
+                         (File_Name => LogFileName,
+                          Content   =>
+                            "Follower and received message AppendEntry (" &
+                            Integer'Image (MessageTerm) & "," &
+                            Integer'Image (MessageLeaderId) & ")");
+
+                       if MessageTerm > Self.all.CurrentTerm then
+                          Self.all.CurrentTerm := MessageTerm;
+                          Self.all.VotedFor    := -1;
+                       end if;
+                       --  1. Reply false if term < currentTerm (§5.1)
+                        if MessageTerm < Self.all.CurrentTerm then
+                           SendToId
+                             (Net      => Net,
+                              Msg      =>
+                                Message.AppendEntryResponse'
+                                  (Term => Self.all.CurrentTerm, Success => False),
+                              Receiver => MessageLeaderId);
+                           return;
+                        end if;
+
+                        declare
+                           Element : LogEntry.LogEntry;
+                        begin
+                           Element := Log (MessagePrevLogIndex);
+
+                           --  3. If an existing entry conflicts with a new one (same index
+                           --     but different terms), delete the existing entry and all that
+                           --     follow it (§5.3)
+                           if Element.Term /= MessageTerm then
+                              Log.Delete
+                                (Element.Index,
+                                 Log.Length -
+                                 Ada.Containers.Count_Type (Element.Index));
+                           end if;
+
+                           --  4. Append any new entries not already in the log
+                           LogEntryVector.Append (Log, MessageLogEntry);
+
+                           --  5. If leaderCommit > commitIndex, set commitIndex =
+                           --     min(leaderCommit, index of last new entry)
+                           CommitIndex.all :=
+                             Integer'Min
+                               (MessageLeaderCommitIndex, MessageLogEntry.Index);
+
+                           SendToId
+                             (Net      => Net,
+                              Msg      =>
+                                Message.AppendEntryResponse'
+                                  (Term => CurrentTerm.all, Success => True),
+                              Receiver => MessageLeaderId);
+                        end;
+                     end;
             when CANDIDATE =>
                 null;
             when LEADER =>
-                null;
+            null;
+                
         end case;
     end HandleAppendEntry;
 
