@@ -24,10 +24,10 @@ package Node is
 
     --  latest term server has seen (initialized to 0 on first boot,
     --  increases monotonically)
-    CurrentTerm : aliased Integer := 0;
+    CurrentTerm : aliased Integer;
     --  candidateId that received vote in current term (or null if
     --  none)
-    VotedFor    : aliased Integer := -1;
+    VotedFor    : aliased Integer;
     --  log entries; each entry contains command for state machine,
     --  and term when entry was received by leader (first index is 1)
     Log         : aliased LogEntryVector.Vector;
@@ -52,15 +52,15 @@ package Node is
 
     -----------------------------  Server simulation params
 
-    CurrentType : aliased NodeType := FOLLOWER;
+    CurrentType : aliased NodeType;
 
-    LastPacketTimestamp      : aliased Time := Clock;
+    LastPacketTimestamp      : aliased Time;
     HeartbeatTimeoutDuration : aliased Integer;
     CandidationTimestamp     : Time;
     ElectionTimeoutDuration  : aliased Integer;
 
-    AppendedCounter : aliased Integer := 0;
-    VotesCounter    : aliased Integer := 0;
+    AppendedCounter : aliased Integer;
+    VotesCounter    : aliased Integer;
 
   end record;
 

@@ -24,8 +24,11 @@ begin
    BG(4) := new Boolean'(False);
 
    N1 := new Node.Node (1, QVector'Access, BG (1));
+   delay 0.1;
    N2 := new Node.Node (2, QVector'Access, BG (2));
+   delay 0.1;
    N3 := new Node.Node (3, QVector'Access, BG (3));
+   delay 0.1;
    N4 := new Node.Node (4, QVector'Access, BG (4));
 
 

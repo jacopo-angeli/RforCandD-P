@@ -24,6 +24,9 @@ package body Node is
         LogFileName : constant String :=
            "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
 
+        package Integer_Random is new Ada.Numerics.Discrete_Random (Integer);
+        Gen : Integer_Random.Generator;
+
     begin
 
         Logger.Log (File_Name => LogFileName, Content => "Node started.");
@@ -63,8 +66,6 @@ package body Node is
     function NodeStateInit return NodeState is
         L : aliased LogEntryVector.Vector;
         T : Integer;
-        package Integer_Random is new Ada.Numerics.Discrete_Random (Integer);
-        Gen : Integer_Random.Generator;
     begin
         --  Append of an empty Entry to resolve the dangling access exception
         LogEntryVector.Append
@@ -72,7 +73,7 @@ package body Node is
 
         -- Timeout duration in milliseconds
         T := (Integer_Random.Random (Gen) mod 10 + 3) * 1_000;
-        Put_Line(Integer'Image(T));
+        Put_Line (Integer'Image (T));
 
         return
            NodeState'
@@ -84,8 +85,8 @@ package body Node is
                NextIndex                => 2, --
                MatchIndex               => 1,--
                CurrentType              => FOLLOWER,--
-               HeartbeatTimeoutDuration => Integer (T / 2),--
-               ElectionTimeoutDuration  => T,--
+               HeartbeatTimeoutDuration => 0,--
+               ElectionTimeoutDuration  => 0,--
                CandidationTimestamp     => Clock, --
                AppendedCounter          => 0,--
                VotesCounter             => 0,--
