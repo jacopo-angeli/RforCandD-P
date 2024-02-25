@@ -20,7 +20,7 @@ package body Node is
 
         Self : aliased NodeState := NodeStateInit;
 
-        --  Log
+        --  Logger
         LogFileName : constant String :=
            "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
 
@@ -74,7 +74,6 @@ package body Node is
         T := (Integer_Random.Random (Gen) mod 10 + 3) * 1_000;
 
         return
-
            NodeState'
               (CurrentTerm              => 0, --
                VotedFor                 => -1, --
@@ -142,7 +141,14 @@ package body Node is
         Msg  : Message.AppendEntry)
     is
     begin
-        null;
+        case Self.all.CurrentType is
+            when FOLLOWER =>
+                null;
+            when CANDIDATE =>
+                null;
+            when LEADER =>
+                null;
+        end case;
     end HandleAppendEntry;
 
     procedure HandleAppendEntryResponse
@@ -151,7 +157,14 @@ package body Node is
         Msg  : Message.AppendEntryResponse)
     is
     begin
-        null;
+        case Self.all.CurrentType is
+            when FOLLOWER =>
+                null;
+            when CANDIDATE =>
+                null;
+            when LEADER =>
+                null;
+        end case;
     end HandleAppendEntryResponse;
 
     procedure HandleRequestVote
@@ -160,7 +173,14 @@ package body Node is
         Msg  : Message.RequestVote)
     is
     begin
-        null;
+        case Self.all.CurrentType is
+            when FOLLOWER =>
+                null;
+            when CANDIDATE =>
+                null;
+            when LEADER =>
+                null;
+        end case;
     end HandleRequestVote;
 
     procedure HandleRequestVoteResponse
@@ -169,7 +189,14 @@ package body Node is
         Msg  : Message.RequestVoteResponse)
     is
     begin
-        null;
+        case Self.all.CurrentType is
+            when FOLLOWER =>
+                null;
+            when CANDIDATE =>
+                null;
+            when LEADER =>
+                null;
+        end case;
     end HandleRequestVoteResponse;
 
     procedure TimeoutManagment
