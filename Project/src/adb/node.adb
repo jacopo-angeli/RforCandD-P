@@ -150,6 +150,7 @@ package body Node is
         --  Logger
         LogFileName : constant String :=
            "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
+
     begin
         case Self.all.CurrentType is
             when FOLLOWER =>
@@ -295,6 +296,11 @@ package body Node is
         Self : access NodeState;--
         Msg  : Message.AppendEntryResponse)
     is
+
+        --  Logger
+        LogFileName : constant String :=
+           "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
+
     begin
         case Self.all.CurrentType is
             when FOLLOWER =>
@@ -303,26 +309,28 @@ package body Node is
                 null;
             when LEADER =>
                 declare
-                  Appended_Counter: Integer :=0;
-                  MessageSuccess : Boolean := Msg.Success;
-                  MessageTerm    : Integer := Msg.Term;
+                    Appended_Counter : Integer := 0;
+                    MessageSuccess   : Boolean := Msg.Success;
+                    MessageTerm      : Integer := Msg.Term;
 
-                  NetLenght : Integer := Integer (Net.all.Length);
+                    NetLenght : Integer := Integer (Net.all.Length);
 
-               begin
-                  Logger.Log
-                    (File_Name => LogFileName,
-                     Content   =>
-                       "AppendedEntryResponse received:" & Boolean'Image (MessageSuccess));
-                  if MessageSuccess then
-                     Appended_Counter:= Appended_Counter + 1;
+                begin
+                    Logger.Log
+                       (File_Name => LogFileName,
+                        Content   =>
+                           "AppendedEntryResponse received:" &
+                           Boolean'Image (MessageSuccess));
+                    if MessageSuccess then
+                        Appended_Counter := Appended_Counter + 1;
 
-                     if Appended_Counter> Integer (NetLenght / 2) then
-                        --Commit the entry in the log (Update Commit Index)
-                        Self.all.CommitIndex:=Self.all.Log(Self.all.Log.Last_Index).Index;
-                     end if;
-                  end if;
-               end;
+                        if Appended_Counter > Integer (NetLenght / 2) then
+                            --Commit the entry in the log (Update Commit Index)
+                            Self.all.CommitIndex :=
+                               Self.all.Log (Self.all.Log.Last_Index).Index;
+                        end if;
+                    end if;
+                end;
         end case;
     end HandleAppendEntryResponse;
 
@@ -474,7 +482,8 @@ package body Node is
 
         if Self.all.CurrentType = LEADER then
 
-            if (TimeSpanFromLastHeartbeat > Self.all.HeartbeatTimeoutDuration) then
+            if (TimeSpanFromLastHeartbeat > Self.all.HeartbeatTimeoutDuration)
+            then
                 -- Heartbeat expired
                 -- Send heartbeat
                 -- Make LastPacketTimestamp = now
@@ -515,7 +524,8 @@ package body Node is
 
         elsif Self.all.CurrentType = FOLLOWER then
 
-            if TimeSpanFromLastHeartbeat > Self.all.ElectionTimeoutDuration then
+            if TimeSpanFromLastHeartbeat > Self.all.ElectionTimeoutDuration
+            then
 
                 Logger.Log
                    (File_Name => LogFileName,--
