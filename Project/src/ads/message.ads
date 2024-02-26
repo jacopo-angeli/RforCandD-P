@@ -1,5 +1,6 @@
+with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with LogEntry;
-with Ada.Containers;
+with Payload;
 package Message is
     type Message is abstract tagged null record;
     --  AppendEntries RPC
@@ -47,5 +48,15 @@ package Message is
     end record;
     function Message_Stringify (Msg : in RequestVote) return String;
     function Message_Stringify (Msg : in RequestVoteResponse) return String;
+
+    type ClientRequest is new Message with record
+        Peyload : Payload.Payload;
+    end record;
+    type ClientResponse is new Message with record
+        Result : Boolean;
+        Msg    : Unbounded_String;
+    end record;
+    function Message_Stringify (Msg : in ClientRequest) return String;
+    function Message_Stringify (Msg : in ClientResponse) return String;
 
 end Message;

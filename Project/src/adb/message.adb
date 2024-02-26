@@ -21,4 +21,13 @@ package body Message is
     begin
         return "Messaggio RequestVoteResponse;";
     end Message_Stringify;
+
+    function Message_Stringify (Msg : in ClientRequest) return String is
+    begin
+        return "Messaggio ClientRequest;";
+    end Message_Stringify;
+    function Message_Stringify (Msg : in ClientResponse) return String is
+    begin
+        return "Messaggio ClientResponse;";
+    end Message_Stringify;
 end Message;
