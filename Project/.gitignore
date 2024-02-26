@@ -47,3 +47,4 @@ lib/
 # Other files to ignore that might be specific to your project
 # Add any files or directories specific to your project that should not be tracked
 
+.vscode/

@@ -1,6 +1,6 @@
-project Default is
+project RaftImpl is
    for Main use ("main.adb");
-   for Source_Dirs use ("src");
+   for Source_Dirs use ("src", "src/adb", "src/ads");
    for Object_Dir use "obj";
    for Exec_Dir use "bin";
 
@@ -11,4 +11,4 @@ project Default is
    package Builder is
       for Executable ("main.adb") use "main";
    end Builder;
-end Default;
+end RaftImpl;
