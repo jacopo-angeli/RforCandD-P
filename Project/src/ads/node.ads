@@ -54,10 +54,18 @@ package Node is
 
     CurrentType : aliased NodeType;
 
+    -----------------------------------------------------------
+    -- Note: Our first try was using Integer type to express --
+    -- the timeout durations. Later we found a big error of  --
+    -- approsimation in the cast operation from time span to --
+    -- integer. Using the correct type of the Real_Time      --
+    -- package we found out that all the subtle problem we   --
+    -- were experiencing depended from the wrong type usage  --
+    -----------------------------------------------------------
     LastPacketTimestamp      : aliased Time;
-    HeartbeatTimeoutDuration : aliased Integer;
-    CandidationTimestamp     : Time;
-    ElectionTimeoutDuration  : aliased Integer;
+    HeartbeatTimeoutDuration : aliased Time_Span;
+    CandidationTimestamp     : aliased Time;
+    ElectionTimeoutDuration  : aliased Time_Span;
 
     AppendedCounter : aliased Integer;
     VotesCounter    : aliased Integer;
@@ -128,11 +136,7 @@ private
     Net  : access QueueVector.Vector;--
     Self : access NodeState);
 
-  --  procedure HandleMessage
-  --   (Net : access QueueVector.Vector; Id : Integer; Msg : Message.Message'Class;
-  --    LastAppendEntryTimestamp : access Time; CurrentTerm : access Integer;
-  --    CurrentState : access State; Log : in out LogEntryVector.Vector;
-  --    CommitIndex              : access Integer; VotedFor : access Integer;
-  --    VotesCounter : access Integer; TimeoutDuration : access Integer);
+  -- Printers
+  function StateToString(S : in NodeState) return String;
 
 end Node;

@@ -15,6 +15,7 @@ package body Node is
     use Ada.Strings.Fixed;
     use Message;
     use Ada.Containers;
+    use Payload;
 
     task body Node is
 
@@ -24,12 +25,9 @@ package body Node is
         LogFileName : constant String :=
            "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
 
-        package Integer_Random is new Ada.Numerics.Discrete_Random (Integer);
-        Gen : Integer_Random.Generator;
-
     begin
 
-        Logger.Log (File_Name => LogFileName, Content => "Node started.");
+        Logger.Log (LogFileName, "Node started.");
 
         loop
 
@@ -42,7 +40,8 @@ package body Node is
                 --  Clear of all the received message while in crash state
                 Queue.Clear (Net.all (Id).all);
                 --  Current type to FOLLOWER
-                Self.CurrentType := FOLLOWER;
+                Self.CurrentType         := FOLLOWER;
+                Self.LastPacketTimestamp := Clock;
                 Logger.Log (LogFileName, "Node up.");
             end if;
 
@@ -58,22 +57,26 @@ package body Node is
             --  TimeoutMangment
             TimeoutManagment (Id, Net, Self'Access);
 
-            null;
         end loop;
     end Node;
 
     --------------------------------------------------------------------------- FUNCTIONS
+
     function NodeStateInit return NodeState is
-        L : aliased LogEntryVector.Vector;
-        T : Integer;
+        L      : aliased LogEntryVector.Vector;
+        T1, T2 : Time_Span;
+        package Integer_Random is new Ada.Numerics.Discrete_Random (Integer);
+        Gen : Integer_Random.Generator;
     begin
+        Integer_Random.Reset (Gen);
+
         --  Append of an empty Entry to resolve the dangling access exception
         LogEntryVector.Append
            (L, LogEntry.LogEntry'(0, 1, Payload.EmptyPayload));
 
         -- Timeout duration in milliseconds
-        T := (Integer_Random.Random (Gen) mod 10 + 3) * 1_000;
-        Put_Line (Integer'Image (T));
+        T1 := Milliseconds (Integer_Random.Random (Gen) mod 150 + 150);
+        T2 := Milliseconds (Integer_Random.Random (Gen) mod 50 + 50);
 
         return
            NodeState'
@@ -85,8 +88,8 @@ package body Node is
                NextIndex                => 2, --
                MatchIndex               => 1,--
                CurrentType              => FOLLOWER,--
-               HeartbeatTimeoutDuration => 0,--
-               ElectionTimeoutDuration  => 0,--
+               HeartbeatTimeoutDuration => T2,--
+               ElectionTimeoutDuration  => T1,--
                CandidationTimestamp     => Clock, --
                AppendedCounter          => 0,--
                VotesCounter             => 0,--
@@ -150,7 +153,6 @@ package body Node is
     begin
         case Self.all.CurrentType is
             when FOLLOWER =>
-                Self.all.LastPacketTimestamp := Clock;
 
                 --  1. Reply false if term < currentTerm (§5.1)
                 --  2. Reply false if log doesn’t contain an entry at prevLogIndex
@@ -170,11 +172,6 @@ package body Node is
                     MessageLeaderCommitIndex : Integer := Msg.LeaderCommit;
                     MessageLeaderId          : Integer := Msg.LeaderId;
                 begin
-                    Logger.Log
-                       (LogFileName, --
-                        "Follower and received message AppendEntry (" &
-                        Integer'Image (MessageTerm) & "," &
-                        Integer'Image (MessageLeaderId) & ")");
 
                     if MessageTerm > Self.all.CurrentTerm then
                         Self.all.CurrentTerm := MessageTerm;
@@ -183,6 +180,9 @@ package body Node is
 
                     --  1. Reply false if term < currentTerm (§5.1)
                     if MessageTerm < Self.all.CurrentTerm then
+                        Logger.Log
+                           (LogFileName,
+                            "Discarded message with lower term received.");
                         Respond
                            (Net, --
                             Message.AppendEntryResponse'
@@ -192,38 +192,47 @@ package body Node is
                         return;
                     end if;
 
-                    declare
-                        Element : LogEntry.LogEntry :=
-                           Self.all.Log (MessagePrevLogIndex);
-                    begin
+                    if Msg.LogEntri.Peyload.Sort /= Payload.EMPTY then
 
-                        --  3. If an existing entry conflicts with a new one (same index
-                        --     but different terms), delete the existing entry and all that
-                        --     follow it (§5.3)
-                        if Element.Term /= MessageTerm then
-                            Self.all.Log.Delete
-                               (Element.Index,
-                                Self.all.Log.Length -
-                                Ada.Containers.Count_Type (Element.Index));
-                        end if;
+                        declare
+                            Element : LogEntry.LogEntry :=
+                               Self.all.Log (MessagePrevLogIndex);
+                        begin
 
-                        --  4. Append any new entries not already in the log
-                        LogEntryVector.Append (Self.all.Log, MessageLogEntry);
+                            --  3. If an existing entry conflicts with a new one (same index
+                            --     but different terms), delete the existing entry and all that
+                            --     follow it (§5.3)
+                            if Element.Term /= MessageTerm then
+                                Self.all.Log.Delete
+                                   (Element.Index,
+                                    Self.all.Log.Length -
+                                    Ada.Containers.Count_Type (Element.Index));
+                            end if;
 
-                        --  5. If leaderCommit > commitIndex, set commitIndex =
-                        --     min(leaderCommit, index of last new entry)
-                        Self.all.CommitIndex :=
-                           Integer'Min
-                              (MessageLeaderCommitIndex,
-                               MessageLogEntry.Index);
+                            --  4. Append any new entries not already in the log
+                            LogEntryVector.Append
+                               (Self.all.Log, MessageLogEntry);
 
-                        Respond
-                           (Net,
-                            Message.AppendEntryResponse'
-                               (Self.all.CurrentTerm, True),
-                            MessageLeaderId);
+                            --  5. If leaderCommit > commitIndex, set commitIndex =
+                            --     min(leaderCommit, index of last new entry)
+                            Self.all.CommitIndex :=
+                               Integer'Min
+                                  (MessageLeaderCommitIndex,
+                                   MessageLogEntry.Index);
 
-                    end;
+                            Respond
+                               (Net,
+                                Message.AppendEntryResponse'
+                                   (Self.all.CurrentTerm, True),
+                                MessageLeaderId);
+
+                        end;
+
+                    else
+
+                        Self.LastPacketTimestamp := Clock;
+
+                    end if;
 
                 end;
             when CANDIDATE =>
@@ -272,17 +281,11 @@ package body Node is
 
                 begin
 
-                    Logger.Log
-                       (LogFileName,
-                        "Candidate and received message AppendEntry (" &
-                        Integer'Image (MessageTerm) & "," &
-                        Integer'Image (MessageLeaderId) & ")");
-
                     Self.all.CurrentTerm         := MessageTerm;
                     Self.all.CurrentType         := FOLLOWER;
                     Self.all.LastPacketTimestamp := Clock;
+
                 end;
-                null;
         end case;
     end HandleAppendEntry;
 
@@ -313,6 +316,7 @@ package body Node is
         LogFileName : constant String :=
            "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
     begin
+        Self.all.LastPacketTimestamp := Clock;
         case Self.all.CurrentType is
             when FOLLOWER =>
                 declare
@@ -369,10 +373,9 @@ package body Node is
                             Self.all.VotedFor := MessageCandidateId;
 
                             Logger.Log
-                               (File_Name => LogFileName,
-                                Content   =>
-                                   "Vote granted to " &
-                                   Integer'Image (MessageCandidateId));
+                               (LogFileName,
+                                "Vote granted to " &
+                                Integer'Image (MessageCandidateId));
                             return;
 
                         else
@@ -439,24 +442,19 @@ package body Node is
         Net  : access QueueVector.Vector;--
         Self : access NodeState)
     is
-        CurrentState             : NodeType := Self.all.CurrentType;
-        ElectionTimeoutDuration  : Integer := Self.all.ElectionTimeoutDuration;
-        HeartbeatTimeoutDuration : Integer := Self.all.ElectionTimeoutDuration;
-        LastPacketTimestamp      : Time     := Self.all.LastPacketTimestamp;
-        CandidationTimestamp     : Time     := Self.all.CandidationTimestamp;
 
-        TimeSpanFromLastHeartbeat : Integer :=
-           Integer (To_Duration (Clock - LastPacketTimestamp)) * 1_000;
-        TimeSpanFromCandidation   : Integer :=
-           Integer (To_Duration (Clock - CandidationTimestamp)) * 1_000;
+        TimeSpanFromLastHeartbeat : Time_Span :=
+           Clock - Self.all.LastPacketTimestamp;
+        TimeSpanFromCandidation   : Time_Span :=
+           Clock - Self.all.CandidationTimestamp;
 
         LogFileName : constant String :=
            "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
     begin
 
-        if (CurrentState = LEADER) then
+        if Self.all.CurrentType = LEADER then
 
-            if (TimeSpanFromLastHeartbeat > HeartbeatTimeoutDuration) then
+            if (TimeSpanFromLastHeartbeat > Self.all.HeartbeatTimeoutDuration) then
                 -- Heartbeat expired
                 -- Send heartbeat
                 -- Make LastPacketTimestamp = now
@@ -469,7 +467,7 @@ package body Node is
                            Peyload => Payload.EmptyPayload);
 
                     PrevLogTerm : Integer :=
-                       Self.all.Log (Self.all.LastApplied).Term;
+                       Self.all.Log (Self.all.Log.Last_Index).Term;
 
                     MessageToSend : Message.AppendEntry :=
                        Message.AppendEntry'
@@ -483,17 +481,21 @@ package body Node is
                 begin
 
                     Broadcast (Id, Net, MessageToSend);
+                    Self.all.LastPacketTimestamp := Clock;
+
+                exception
+                    when others =>
+                        Logger.Log
+                           (LogFileName,--
+                            "Exception on timeout managment.");
 
                 end;
 
-                Self.all.LastPacketTimestamp := Clock;
             end if;
 
-        end if;
+        elsif Self.all.CurrentType = FOLLOWER then
 
-        if (CurrentState = FOLLOWER) then
-
-            if (TimeSpanFromLastHeartbeat > ElectionTimeoutDuration) then
+            if TimeSpanFromLastHeartbeat > Self.all.ElectionTimeoutDuration then
 
                 Logger.Log
                    (File_Name => LogFileName,--
@@ -508,6 +510,7 @@ package body Node is
                 Self.all.CurrentTerm          := Self.all.CurrentTerm + 1;
                 Self.all.VotesCounter         := 1;
                 Self.all.CandidationTimestamp := Clock;
+
                 Broadcast
                    (Id,--
                     Net,--
@@ -524,15 +527,16 @@ package body Node is
                     Content   => "Requested vote to other nodes on the net.");
             end if;
 
-        end if;
+        elsif Self.all.CurrentType = CANDIDATE then
 
-        if (CurrentState = CANDIDATE) then
             --  • If election timeout elapses: start new election
             if TimeSpanFromCandidation > Self.all.ElectionTimeoutDuration then
+
                 --  TODO : Think of change all this if content to a CurrentType := FOLLOWER
                 Self.all.CurrentTerm          := Self.all.CurrentTerm + 1;
                 Self.all.VotesCounter         := 1;
                 Self.all.CandidationTimestamp := Clock;
+
                 Broadcast
                    (Id,--
                     Net,--
@@ -540,14 +544,26 @@ package body Node is
                        (Term         => Self.all.CurrentTerm,--
                         CandidateId  => Id,--
                         LastLogIndex =>
-                           Self.all.Log (Self.all.Log.Last_Index).Index,--
+                           Self.all.Log (Self.all.Log.Last_Index).Index,
                         LastLogTerm  =>
                            Self.all.Log (Self.all.Log.Last_Index).Term));
-                Logger.Log
-                   (File_Name => LogFileName, Content => "Requested vote...");
-            end if;
-        end if;
 
+                Logger.Log (LogFileName, "Requested vote...");
+
+            end if;
+
+        end if;
     end TimeoutManagment;
+
+    function StateToString (S : in NodeState) return String is
+    begin
+        return
+           "(" & "Term:" & Integer'Image (S.CurrentTerm) & ", VotedFor: " &
+           Integer'Image (S.VotedFor) & ", CommitIndex: " &
+           Integer'Image (S.CommitIndex) & ", LastApplied: " &
+           Integer'Image (S.LastApplied) & ", NextIndex: " &
+           Integer'Image (S.NextIndex) & ", CurrentType: " &
+           NodeType'Image (S.CurrentType) & ")";
+    end StateToString;
 
 end Node;
