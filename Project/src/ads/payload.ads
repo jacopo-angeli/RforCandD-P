@@ -16,4 +16,6 @@ package Payload is
     end record;
 
     function EmptyPayload return Payload;
+    function "=" (Left, Right : Payload) return Boolean;
+
 end Payload;

@@ -64,15 +64,12 @@ package body Node is
 
     function NodeStateInit return NodeState is
         L      : aliased LogEntryVector.Vector;
+        DB     : aliased PayloadVector.Vector;
         T1, T2 : Time_Span;
         package Integer_Random is new Ada.Numerics.Discrete_Random (Integer);
         Gen : Integer_Random.Generator;
     begin
         Integer_Random.Reset (Gen);
-
-        --  Append of an empty Entry to resolve the dangling access exception
-        LogEntryVector.Append
-           (L, LogEntry.LogEntry'(0, 1, Payload.EmptyPayload));
 
         -- Timeout duration in milliseconds
         T1 := Milliseconds (Integer_Random.Random (Gen) mod 150 + 150);
@@ -83,10 +80,11 @@ package body Node is
               (CurrentTerm              => 0, --
                VotedFor                 => -1, --
                Log                      => L, --
-               CommitIndex              => 1,--
-               LastApplied              => 1,--
-               NextIndex                => 2, --
-               MatchIndex               => 1,--
+               DB                       => DB,--
+               CommitIndex              => 0,--
+               LastApplied              => 0,--
+               NextIndex                => 1, --
+               MatchIndex               => 0,--
                CurrentType              => FOLLOWER,--
                HeartbeatTimeoutDuration => T2,--
                ElectionTimeoutDuration  => T1,--
@@ -166,12 +164,16 @@ package body Node is
                 --     min(leaderCommit, index of last new entry)
 
                 declare
-                    MessageLogEntry : LogEntry.LogEntry := Msg.LogEntri;
+
+                    MessageLogEntries : LogEntryVector.Vector :=
+                       Msg.LogEntries;
 
                     MessageTerm              : Integer := Msg.Term;
                     MessagePrevLogIndex      : Integer := Msg.PrevLogIndex;
+                    MessagePrevLogTerm       : Integer := Msg.PrevLogTerm;
                     MessageLeaderCommitIndex : Integer := Msg.LeaderCommit;
                     MessageLeaderId          : Integer := Msg.LeaderId;
+
                 begin
 
                     if MessageTerm > Self.all.CurrentTerm then
@@ -193,7 +195,8 @@ package body Node is
                         return;
                     end if;
 
-                    if Msg.LogEntri.Peyload.Sort /= Payload.EMPTY then
+                    --
+                    if not Msg.LogEntries.Is_Empty then
 
                         declare
                             Element : LogEntry.LogEntry :=
@@ -203,7 +206,7 @@ package body Node is
                             --  3. If an existing entry conflicts with a new one (same index
                             --     but different terms), delete the existing entry and all that
                             --     follow it (§5.3)
-                            if Element.Term /= MessageTerm then
+                            if Element.Term /= MessagePrevLogTerm then
                                 Self.all.Log.Delete
                                    (Element.Index,
                                     Self.all.Log.Length -
@@ -211,15 +214,17 @@ package body Node is
                             end if;
 
                             --  4. Append any new entries not already in the log
-                            LogEntryVector.Append
-                               (Self.all.Log, MessageLogEntry);
+                            --  LogEntryVector.Append
+                            --     (Self.all.Log, MessageLogEntry);
 
                             --  5. If leaderCommit > commitIndex, set commitIndex =
                             --     min(leaderCommit, index of last new entry)
                             Self.all.CommitIndex :=
                                Integer'Min
                                   (MessageLeaderCommitIndex,
-                                   MessageLogEntry.Index);
+                                   MessageLogEntries
+                                      (MessageLogEntries.Last_Index)
+                                      .Index);
 
                             Respond
                                (Net,
@@ -227,13 +232,49 @@ package body Node is
                                    (Self.all.CurrentTerm, True),
                                 MessageLeaderId);
 
+                        exception
+
+                            --  No element in Log at index MessagePrevLogIndex
+                            when others =>
+
+                                --  If MessagePrevLogIndex = 0 append the message else return false
+                                --  else respond false
+                                if MessagePrevLogIndex = 0 then
+
+                                    for E of MessageLogEntries loop
+                                        Self.all.Log.Append (E);
+                                    end loop;
+
+                                    Self.all.CommitIndex :=
+                                       Integer'Min
+                                          (MessageLeaderCommitIndex,
+                                           MessageLogEntries
+                                              (MessageLogEntries.Last_Index)
+                                              .Index);
+
+                                    Respond
+                                       (Net, --
+                                        Message.AppendEntryResponse'
+                                           (Self.all.CurrentTerm,--
+                                            True),--
+                                        MessageLeaderId);
+
+                                else
+
+                                    Respond
+                                       (Net, --
+                                        Message.AppendEntryResponse'
+                                           (Self.all.CurrentTerm,--
+                                            False),--
+                                        MessageLeaderId);
+
+                                end if;
+
                         end;
 
-                    else
-
-                        Self.LastPacketTimestamp := Clock;
-
                     end if;
+
+                    Self.all.LastPacketTimestamp := Clock;
 
                 end;
             when CANDIDATE =>
@@ -243,7 +284,7 @@ package body Node is
                 --  state.
                 declare
 
-                    MessageLogEntry : LogEntry.LogEntry := Msg.LogEntri;
+                    MessageLogEntry : LogEntryVector.Vector := Msg.LogEntries;
 
                     MessageTerm              : Integer := Msg.Term;
                     MessagePrevLogIndex      : Integer := Msg.PrevLogIndex;
@@ -504,7 +545,7 @@ package body Node is
                            LeaderId     => Id,--
                            PrevLogIndex => Self.all.LastApplied,--
                            PrevLogTerm  => PrevLogTerm,--
-                           LogEntri     => EmptyEntry,--
+                           LogEntries   => LogEntryVector.Empty_Vector,--
                            LeaderCommit => Self.all.CommitIndex);
 
                 begin

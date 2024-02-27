@@ -1,9 +1,12 @@
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
-with LogEntry;
+with LogEntry; use LogEntry;
 with Payload;
 package Message is
+    
+
     type Message is abstract tagged null record;
     --  AppendEntries RPC
+
     type AppendEntry is new Message with record
         --  Leader’s term
         Term         : Integer;
@@ -14,7 +17,7 @@ package Message is
         --  Term of prevLogIndex entry
         PrevLogTerm  : Integer;
         --  Log entries to store (empty for heartbeat; may send more than one for efficiency)
-        LogEntri     : LogEntry.LogEntry;
+        LogEntries   : LogEntryVector.Vector;
         --  Leader’s commitIndex
         LeaderCommit : Integer;
     end record;

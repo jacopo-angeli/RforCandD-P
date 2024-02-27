@@ -3,16 +3,19 @@ with Ada.Real_Time; use Ada.Real_Time;
 
 with Message;
 with Queue;
-with LogEntry;
+with LogEntry;use LogEntry;
+with Payload;
 package Node is
   ----------------------------------------------------------------------------  PACKAGES AND RELATED
   -- Pointer to the queue of messages and vector of queue pointers
   type QueueAccess is access all Queue.Queue;
   package QueueVector is new Ada.Containers.Vectors
-   (Index_Type => Positive, Element_Type => QueueAccess);
-  package LogEntryVector is new Ada.Containers.Vectors
-   (Index_Type => Natural, Element_Type => LogEntry.LogEntry,
-    "="        => LogEntry."=");
+   (Index_Type   => Positive,--
+    Element_Type => QueueAccess);
+  package PayloadVector is new Ada.Containers.Vectors
+   (Index_Type   => Natural,--
+    Element_Type => Payload.Payload,--
+    "="          => Payload."=");
 
   ---------------------------------------------------------------------------- TYPES
 
@@ -31,6 +34,7 @@ package Node is
     --  log entries; each entry contains command for state machine,
     --  and term when entry was received by leader (first index is 1)
     Log         : aliased LogEntryVector.Vector;
+    DB          : aliased PayloadVector.Vector;
 
     -----------------------------  Volatile state on all servers:
 
@@ -137,6 +141,6 @@ private
     Self : access NodeState);
 
   -- Printers
-  function StateToString(S : in NodeState) return String;
+  function StateToString (S : in NodeState) return String;
 
 end Node;

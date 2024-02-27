@@ -6,7 +6,7 @@ package body Message is
     function Message_Stringify (Msg : in AppendEntry) return String is
     begin
         return
-           "Messaggio AppendEntry con entry:" & Entry_Stringify (Msg.LogEntri);
+           "Messaggio AppendEntry";
     end Message_Stringify;
     function Message_Stringify (Msg : in AppendEntryResponse) return String is
     begin
