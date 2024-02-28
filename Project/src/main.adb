@@ -1,7 +1,9 @@
-with Ada.Text_IO; use Ada.Text_IO;
+with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+with Ada.Text_IO;           use Ada.Text_IO;
+with Node;                  use Node;
+with Payload;
 with Queue;
 with Message;
-with Node;        use Node;
 
 procedure Main is
    Q1 : QueueAccess := new Queue.Queue;
@@ -52,19 +54,106 @@ begin
             case Integer'Value (A) is
                when 0 =>
                   --  MoneyTranfer
-                  Put_Line("MoneyTranfer");
+                  declare
+
+                     P      : Payload.Payload;
+                     FA, TA : Unbounded_String;
+                     Q      : Float;
+
+                  begin
+
+                     Put ("From account: ");
+                     Get (FA);
+                     Put ("To account: ");
+                     Get (TA);
+                     Put ("Quantity: ");
+                     Get (Q);
+
+                     P :=
+                       Payload.Payload'
+                         (Sort         => Payload.MONEYTRANSFER,--
+                          From_Account => FA,--
+                          To_Account   => TA,--
+                          Quantity     => Float'Value (Q),--
+                          New_Account  => "",--
+                          Owner        => "");
+
+                  end;
                when 1 =>
                   --  Open Account
-                  Put_Line("Open Account");
+                  declare
+
+                     P : Payload.Payload;
+                     O : Unbounded_String;
+
+                  begin
+
+                     Put ("Owner name: ");
+                     Get (O);
+
+                     P :=
+                       Payload.Payload'
+                         (Sort         => Payload.ACCOUNTOPEN,--
+                          From_Account => "",--
+                          To_Account   => "",--
+                          Quantity     => 0.0,--
+                          New_Account  => "",--
+                          Owner        => O);
+
+                  end;
                when 2 =>
                   --  Withdraw
-                  Put_Line("Withdraw");
+                  declare
+
+                     P  : Payload.Payload;
+                     FA : Unbounded_String;
+                     Q  : Float;
+
+                  begin
+
+                     Put ("From account: ");
+                     Get (FA);
+                     Put ("Quantity: ");
+                     Get (Q);
+
+                     P :=
+                       Payload.Payload'
+                         (Sort         => Payload.WITHDRAWAL,--
+                          From_Account => FA,--
+                          To_Account   => "",--
+                          Quantity     => Float'Value (Q),--
+                          New_Account  => "",--
+                          Owner        => "");
+
+                  end;
                when 3 =>
                   --  Deposit
-                  Put_Line("Deposit");
+                  declare
+
+                     P  : Payload.Payload;
+                     TA : Unbounded_String;
+                     Q  : Float;
+
+                  begin
+
+                     Put ("To account: ");
+                     Get (TA);
+                     Put ("Quantity: ");
+                     Get (Q);
+
+                     P :=
+                       Payload.Payload'
+                         (Sort         => Payload.DEPOSIT,--
+                          From_Account => "",--
+                          To_Account   => TA,--
+                          Quantity     => Float'Value(Q),--
+                          New_Account  => "",--
+                          Owner        => "");
+
+                  end;
                when others =>
                   --  Invalid operation
-                  Put_Line("Invalid operation");
+                  Put_Line ("Invalid operation");
             end case;
          end if;
       end loop;
