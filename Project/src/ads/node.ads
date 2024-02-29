@@ -1,21 +1,27 @@
 with Ada.Containers.Vectors;
+with Ada.Containers.Indefinite_Hashed_Maps;
+with Ada.Strings;
 with Ada.Real_Time; use Ada.Real_Time;
 
 with Message;
 with Queue;
-with LogEntry;use LogEntry;
+with LogEntry; use LogEntry;
 with Payload;
 package Node is
+
   ----------------------------------------------------------------------------  PACKAGES AND RELATED
+
   -- Pointer to the queue of messages and vector of queue pointers
   type QueueAccess is access all Queue.Queue;
   package QueueVector is new Ada.Containers.Vectors
    (Index_Type   => Positive,--
     Element_Type => QueueAccess);
-  package PayloadVector is new Ada.Containers.Vectors
-   (Index_Type   => Natural,--
-    Element_Type => Payload.Payload,--
-    "="          => Payload."=");
+  package IntegerVector is new Ada.Containers.Vectors
+   (Index_Type   => Positive,--
+    Element_Type => Natural);
+  function IntegerVectorInfimum (V : in IntegerVector.Vector) return Integer;
+  function EqualityCount
+   (V : in IntegerVector.Vector; E : Integer) return Integer;
 
   ---------------------------------------------------------------------------- TYPES
 
@@ -34,7 +40,7 @@ package Node is
     --  log entries; each entry contains command for state machine,
     --  and term when entry was received by leader (first index is 1)
     Log         : aliased LogEntryVector.Vector;
-    DB          : aliased PayloadVector.Vector;
+    DB          : aliased Payload.PayloadVector.Vector;
 
     -----------------------------  Volatile state on all servers:
 
@@ -49,10 +55,15 @@ package Node is
 
     --  for each server, index of the next log entry to send
     --  to that server (initialized to leader last log index + 1)
-    NextIndex  : aliased Integer;
+    --      The leader maintains a nextIndex for each follower,
+    --      which is the index of the next log entry the leader will
+    --      send to that follower. When a leader first comes to power,
+    --      it initializes all nextIndex values to the index just after the
+    --      last one in its log.
+    NextIndex  : aliased IntegerVector.Vector;
     --  for each server, index of highest log entry known to be
     --  replicated on server (initialized to 0, increases monotonically)
-    MatchIndex : aliased Integer;
+    MatchIndex : aliased IntegerVector.Vector;
 
     -----------------------------  Server simulation params
 
@@ -71,8 +82,8 @@ package Node is
     CandidationTimestamp     : aliased Time;
     ElectionTimeoutDuration  : aliased Time_Span;
 
-    AppendedCounter : aliased Integer;
-    VotesCounter    : aliased Integer;
+    CurrentLeader : aliased Integer;
+    VotesCounter  : aliased Integer;
 
   end record;
 
@@ -87,7 +98,12 @@ package Node is
   task type Node
    (Id     : Integer; --
     Net    : access QueueVector.Vector; --
-    Paused : access Boolean);
+    Paused : access Boolean) is
+    entry Request
+     (Msg   : in     Message.ClientRequest;
+      Response :    out Message.ClientResponse);
+  end Node;
+
   type NodeAccess is access all Node;
 
 private
@@ -121,6 +137,11 @@ private
     Net  : access QueueVector.Vector;--
     Self : access NodeState; --
     Msg  : Message.RequestVoteResponse);
+  procedure HandleClientRequest
+   (Id   : Integer; --
+    Net  : access QueueVector.Vector;--
+    Self : access NodeState; --
+    Msg  : Message.ClientRequest);
 
   --  Broadcast procedure
   procedure Broadcast

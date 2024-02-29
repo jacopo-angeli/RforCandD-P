@@ -11,10 +11,15 @@ package LogEntry is
 
     function Entry_Stringify (obj : in LogEntry) return String;
     function "=" (Left, Right : LogEntry) return Boolean;
-    
+
     package LogEntryVector is new Ada.Containers.Vectors
        (Index_Type   => Natural,--
         Element_Type => LogEntry,--
         "="          => "=");
+
+    function VectorSlice
+       (V           : LogEntryVector.Vector;--
+        Start, Stop : Integer)
+        return LogEntryVector.Vector;
 
 end LogEntry;

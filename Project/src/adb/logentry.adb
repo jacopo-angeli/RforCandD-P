@@ -10,4 +10,18 @@ package body LogEntry is
     begin
         return Left.Index = Right.Index and Left.Term = Right.Term;
     end "=";
+
+    function VectorSlice
+       (V : LogEntryVector.Vector; Start, Stop : Integer)
+        return LogEntryVector.Vector
+    is
+        R : LogEntryVector.Vector;
+    begin
+        
+        for I in Start .. Start loop
+            R.Append (V (I));
+        end loop;
+
+        return R;
+    end VectorSlice;
 end LogEntry;

@@ -1,5 +1,8 @@
-with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+with Ada.Strings.Unbounded;
+with Ada.Containers.Vectors;
 package Payload is
+
+     use Ada.Strings.Unbounded;
 
     type PayloadType is
        (MONEYTRANSFER, ACCOUNTOPEN, WITHDRAWAL, DEPOSIT, EMPTY);
@@ -17,5 +20,10 @@ package Payload is
 
     function EmptyPayload return Payload;
     function "=" (Left, Right : Payload) return Boolean;
+    package PayloadVector is new Ada.Containers.Vectors
+       (Index_Type   => Natural,--
+        Element_Type => Payload,--
+        "="          => "=");
+
 
 end Payload;
