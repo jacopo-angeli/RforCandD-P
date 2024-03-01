@@ -3,6 +3,7 @@ with Ada.Strings.Fixed;       use Ada.Strings.Fixed;
 with Ada.Calendar;            use Ada.Calendar;
 with Ada.Calendar.Formatting; use Ada.Calendar.Formatting;
 with LogEntry;
+with Ada.Strings.Unbounded;
 
 package body Logger is
 
@@ -27,5 +28,26 @@ package body Logger is
 
         Close (File);
     end Log;
+    procedure PrettyPrint (File_Name : String; Content : LogEntryVector.Vector)
+    is
+        File : File_Type;
+    begin
+        begin
+            Open
+               (File => File, Mode => Append_File,
+                Name => ("logsEntry/" & File_Name & ".log"));
+            -- If the file opens successfully, it exists.
+        exception
+            when E : others =>
+                -- If an exception occurs, assume the file does not exist.
+                Create
+                   (File => File, Mode => Append_File,
+                    Name => ("logsEntry/" & File_Name & ".log"));
+        end;
+        for I in Content.First_Index .. Content.Last_Index loop
+            Put (File => File, Item => Image (Clock) & " $ ");
+            Put_Line (File => File, Item => (LogEntry.Entry_Stringify(Content(i))));
+        end loop;
+    end PrettyPrint;
 
 end Logger;

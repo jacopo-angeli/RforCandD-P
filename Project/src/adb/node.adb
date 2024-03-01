@@ -24,6 +24,7 @@ package body Node is
         Self        : aliased NodeState := NodeStateInit (NodesNumber);
 
         --  Logger
+        LogEntryFileName : constant String := "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
         LogFileName : constant String :=
            "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
 
