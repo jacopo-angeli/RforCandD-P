@@ -20,11 +20,11 @@ package body Node is
     use Ada.Strings.Unbounded;
 
     task body Node is
-
-        Self : aliased NodeState := NodeStateInit;
-        --  Self : aliased NodeState := NodeStateInit(Net.Length);
+        NodesNumber : Integer           := Integer (Net.all.Length / 2);
+        Self        : aliased NodeState := NodeStateInit (NodesNumber);
 
         --  Logger
+        LogEntryFileName : constant String := "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
         LogFileName : constant String :=
            "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
 
@@ -77,7 +77,7 @@ package body Node is
 
     --------------------------------------------------------------------------- FUNCTIONS
 
-    function NodeStateInit return NodeState is
+    function NodeStateInit (NumberOfNodes : Integer) return NodeState is
         L          : aliased LogEntryVector.Vector;
         DB         : aliased PayloadVector.Vector;
         T1, T2     : Time_Span;
@@ -92,9 +92,8 @@ package body Node is
         T1 := Milliseconds (Integer_Random.Random (Gen) mod 150 + 150);
         T2 := Milliseconds (Integer_Random.Random (Gen) mod 50 + 50);
 
-        --  TODO : Change to match the Net size
-        NextIndex.Append (1, 4);
-        MatchIndex.Append (0, 4);
+        NextIndex.Append (1, Ada.Containers.Count_Type (NumberOfNodes));
+        MatchIndex.Append (0, Ada.Containers.Count_Type (NumberOfNodes));
 
         return
            NodeState'
@@ -188,7 +187,7 @@ package body Node is
                 PrevLogTerm  := CurrentTerm;
             else
                 PrevLogIndex := Self.all.Log (Self.all.Log.Last_Index).Index;
-                PrevLogIndex := Self.all.Log (Self.all.Log.Last_Index).Term;
+                PrevLogTerm  := Self.all.Log (Self.all.Log.Last_Index).Term;
             end if;
 
             LogEntries.Append (NewEntry);
@@ -260,20 +259,38 @@ package body Node is
             end;
         end LeaderBehaviour;
 
-        procedure FollowerBehaviour is
+        function FollowerBehaviour return Message.ClientResponse is
         begin
             --  Redirect the client call to Leader
-            null;
+            --  The client doesn't know that it's communicating with a follower
+            --  Use respond function to send the client request to the leader
+            Respond
+               (Net => Net, Msg => Msg, Receiver => Self.all.CurrentLeader);
+            -- loop until I recieve a ClientResponse and then return that
+            while not Queue.Is_Empty (Net.all (id).all) loop
+                declare
+                    Msg : Message.Message'Class :=
+                       Queue.Dequeue (Net.all (Id).all);
+                begin
+                    if (Msg in Message.ClientResponse'Class) then
+                        return Message.ClientResponse (Msg);
+                    end if;
+                    HandleMessage
+                       (Id,--
+                        Net,--
+                        Self,--
+                        Queue.Dequeue (Net.all (Id).all));
+                end;
+            end loop;
+            return Message.ClientResponse'(False, To_Unbounded_String (""));
+            --  TODO CHANGE EXIT METHOD (using a timer and a flag)
         end FollowerBehaviour;
     begin
         case Self.all.CurrentType is
             when LEADER =>
                 return LeaderBehaviour;
             when others =>
-                return
-                   Message.ClientResponse'
-                      (False, To_Unbounded_String ("Not a leader."));
-
+                return FollowerBehaviour;
         end case;
     end HandleClientRequest;
 

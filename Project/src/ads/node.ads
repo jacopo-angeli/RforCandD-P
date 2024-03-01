@@ -109,7 +109,7 @@ package Node is
 private
 
   -- NodeState init function
-  function NodeStateInit return NodeState;
+  function NodeStateInit(NumberOfNodes : Integer) return NodeState;
 
   --  Handle message procedures
   procedure HandleMessage
