@@ -30,25 +30,69 @@ begin
    N4 := new Node.Node (4, QVector'Access, BG (4));
 
    declare
-      Req : Message.ClientRequest;
-      Res : Message.ClientResponse;
-      PP  : Payload.Payload;
+      Action : String (1 .. 1);
    begin
-      delay 3.0;
-      Put_Line ("Sending request");
-      PP  := Payload.EmptyPayload;
-      Req := Message.ClientRequest'(Peyload => PP);
-      N1.Request (Req, Res);
-      if Res.Result = False then
-         N2.Request (Req, Res);
-      end if;
-      if Res.Result = False then
-         N3.Request (Req, Res);
-      end if;
-      if Res.Result = False then
-         N4.Request (Req, Res);
-      end if;
-      Put_Line ("Done");
+      loop
+         Put ("1 - Node managment, 2 - Send request :: ");
+         Get (Action);
+         case Integer'Value (Action) is
+
+            when 1 =>
+               declare
+                  N : String (1 .. 1);
+               begin
+                  Put ("1 - Stop, 2 - Resume :: ");
+                  Get (Action);
+                  Put ("Node number :: ");
+                  Get (N);
+                  case Integer'Value (Action) is
+                     when 1 =>
+                        BG (Integer'Value (N)).all := True;
+
+                     when 2 =>
+                        BG (Integer'Value (N)).all := False;
+
+                     when others =>
+                        Put_Line ("Invalid input.");
+
+                  end case;
+               end;
+
+            when 2 =>
+               declare
+
+                  ReqType : String (1 .. 1);
+
+                  Req : Message.ClientRequest;
+                  Res : Message.ClientResponse;
+                  PP  : Payload.Payload;
+
+               begin
+                  Put ("Request type :: ");
+                  Get (ReqType);
+                  case Integer'Value (ReqType) is
+                     when others =>
+                        --  TODO : Manage of different type of request
+                        PP  := Payload.EmptyPayload;
+                        Req := Message.ClientRequest'(Peyload => PP);
+                        --  N1.Request (Req, Res);
+                        --  if Res.Result = False then
+                        --     N2.Request (Req, Res);
+                        --  end if;
+                        --  if Res.Result = False then
+                        --     N3.Request (Req, Res);
+                        --  end if;
+                        --  if Res.Result = False then
+                        --     N4.Request (Req, Res);
+                        --  end if;
+                  end case;
+                  Put_Line
+                    ("Response {Result : " & Boolean'Image(Res.Result) & ", body : " & To_String(Res.Msg) & "}");
+               end;
+            when others =>
+               Put_Line ("Choice not valid.");
+         end case;
+      end loop;
    end;
 
 end Main;

@@ -22,6 +22,7 @@ package body Node is
     task body Node is
 
         Self : aliased NodeState := NodeStateInit;
+        --  Self : aliased NodeState := NodeStateInit(Net.Length);
 
         --  Logger
         LogFileName : constant String :=
@@ -44,6 +45,7 @@ package body Node is
             or
                 delay 0.0;
                 --  Crash simulation
+                if (Paused.all) then Put_line(Boolean'Image(Paused.all)); end if;
                 if Paused.all then
                     Logger.Log (LogFileName, "Node crashed.");
                     while Paused.all loop
@@ -226,7 +228,6 @@ package body Node is
                    (EqualityCount (Self.all.NextIndex, ExpectedNextIndex) >
                     Integer (NetLenght / 2))
                 loop
-                    delay 1.0;
                     --------------------------------------------------------------
                     -- The point is that after a broadcast of the appendEntry   --
                     -- we have three possibility:                               --
@@ -244,22 +245,13 @@ package body Node is
                     --    will delete it.                                       --
                     --------------------------------------------------------------
                     while not Queue.Is_Empty (Net.all (id).all) loop
+                        
                         HandleMessage
                            (Id,--
                             Net,--
                             Self,--
                             Queue.Dequeue (Net.all (Id).all));
-                        if (Clock - Self.all.LastPacketTimestamp) >
-                           Self.all.HeartbeatTimeoutDuration
-                        then
-                            Broadcast
-                               (Id, Net,
-                                Message.AppendEntry'
-                                   (Self.all.CurrentTerm, Id, 0, 0,
-                                    LogEntryVector.Empty_Vector,
-                                    Self.all.CommitIndex));
-                            Self.all.LastPacketTimestamp := Clock;
-                        end if;
+
                     end loop;
                 end loop;
                 return
@@ -523,6 +515,7 @@ package body Node is
             Self.all.LastPacketTimestamp := Clock;
 
         end LeaderBehaviour;
+    
     begin
         case Self.all.CurrentType is
             when FOLLOWER =>
