@@ -20,8 +20,8 @@ package body Node is
     use Ada.Strings.Unbounded;
 
     task body Node is
-
-        Self : aliased NodeState := NodeStateInit;
+        NodesNumber         : Integer := Integer (Net.all.Length / 2);
+        Self : aliased NodeState := NodeStateInit(NodesNumber);
 
         --  Logger
         LogFileName : constant String :=
@@ -75,7 +75,7 @@ package body Node is
 
     --------------------------------------------------------------------------- FUNCTIONS
 
-    function NodeStateInit return NodeState is
+    function NodeStateInit(NumberOfNodes : Integer) return NodeState is
         L          : aliased LogEntryVector.Vector;
         DB         : aliased PayloadVector.Vector;
         T1, T2     : Time_Span;
@@ -90,9 +90,8 @@ package body Node is
         T1 := Milliseconds (Integer_Random.Random (Gen) mod 150 + 150);
         T2 := Milliseconds (Integer_Random.Random (Gen) mod 50 + 50);
 
-        --  TODO : Change to match the Net size
-        NextIndex.Append (1, 4);
-        MatchIndex.Append (0, 4);
+        NextIndex.Append (1, NumberOfNodes);
+        MatchIndex.Append (0, NumberOfNodes);
 
         return
            NodeState'
