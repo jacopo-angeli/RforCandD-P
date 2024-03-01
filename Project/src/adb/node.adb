@@ -3,6 +3,7 @@ with Ada.Real_Time;
 with Ada.Strings.Fixed;
 with Ada.Numerics.Discrete_Random;
 with Ada.Containers.Vectors;
+with Ada.Strings.Unbounded;
 
 with Message;
 with Logger;
@@ -16,6 +17,7 @@ package body Node is
     use Message;
     use Ada.Containers;
     use Payload;
+    use Ada.Strings.Unbounded;
 
     task body Node is
 
@@ -31,8 +33,13 @@ package body Node is
 
         loop
             select
-                accept Request (Msg: in Message.ClientRequest; Response : out Message.ClientResponse) do
-                    HandleClientRequest(Id, Net, Self'Access, Msg);
+                accept Request
+                   (Msg      : in     Message.ClientRequest;
+                    Response :    out Message.ClientResponse)
+                do
+                    Logger.Log (LogFileName, "Client request received.");
+                    Response :=
+                       HandleClientRequest (Id, Net, Self'Access, Msg);
                 end Request;
             or
                 delay 0.0;
@@ -62,7 +69,6 @@ package body Node is
                 --  TimeoutMangment
                 TimeoutManagment (Id, Net, Self'Access);
 
-                
             end select;
         end loop;
     end Node;
@@ -151,6 +157,134 @@ package body Node is
 
     end EqualityCount;
 
+    function HandleClientRequest
+       (Id   : Integer; --
+        Net  : access QueueVector.Vector;--
+        Self : access NodeState; --
+        Msg  : Message.ClientRequest) return Message.ClientResponse
+    is
+        LogFileName : constant String :=
+           "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
+
+        function LeaderBehaviour return Message.ClientResponse is
+
+            CurrentTerm  : Integer := Self.all.CurrentTerm;
+            PrevLogIndex : Integer;
+            PrevLogTerm  : Integer;
+            LogEntries   : LogEntryVector.Vector;
+            LeaderCommit : Integer := Self.all.CommitIndex;
+
+            NewEntry : LogEntry.LogEntry :=
+               LogEntry.LogEntry'
+                  (CurrentTerm, Self.all.NextIndex (Id), Msg.Peyload);
+
+            ToBroadcast : Message.AppendEntry;
+
+        begin
+            if Self.all.Log.Is_Empty then
+                PrevLogIndex := 0;
+                PrevLogTerm  := CurrentTerm;
+            else
+                PrevLogIndex := Self.all.Log (Self.all.Log.Last_Index).Index;
+                PrevLogIndex := Self.all.Log (Self.all.Log.Last_Index).Term;
+            end if;
+
+            LogEntries.Append (NewEntry);
+            ToBroadcast :=
+               Message.AppendEntry'
+                  (CurrentTerm,--
+                   Id,--
+                   PrevLogIndex,--
+                   PrevLogTerm,--
+                   LogEntries,--
+                   LeaderCommit);
+
+            --  Appends the command to its log as a new entry, then is-
+            --  sues AppendEntries RPCs in parallel to each of the other
+            --  servers to replicate the entry. When the entry has been
+            --  safely replicated (as described below), the leader applies
+            --  the entry to its state machine and returns the result of that
+            --  execution to the client
+
+            --  Append Entry in leader log
+            Self.all.Log.Append (NewEntry);
+            --  Update NextIndex(Id)
+            Self.all.NextIndex (Id) := Self.all.NextIndex (Id) + 1;
+            --  Restore of AppendedCounter in order to detect when to respond to the client
+            --  Self.all.AppendedCounter := 0;
+            --  Broadcast AppendEntry
+            Broadcast (Id, Net, ToBroadcast);
+
+            declare
+
+                ExpectedNextIndex : Integer := Self.all.NextIndex (Id);
+                NetLenght         : Integer := Integer (Net.all.Length / 2);
+
+            begin
+                --  Repeat till at least N nodes has NextIndex synced, whit N=Net.Lenght\2
+                while not
+                   (EqualityCount (Self.all.NextIndex, ExpectedNextIndex) >
+                    Integer (NetLenght / 2))
+                loop
+                    delay 1.0;
+                    --------------------------------------------------------------
+                    -- The point is that after a broadcast of the appendEntry   --
+                    -- we have three possibility:                               --
+                    --  - Follower respond true: Then NextIndex(FollowerId)     --
+                    --    will be equal to NextIdex(Leader);                    --
+                    --  - Follower respond false: Then leader keep send Entries --
+                    --    till NextIndex(Follower) will be equal to             --
+                    --    NextIndex(Leader);                                    --
+                    --  - Follower doesent respond: Then leader keep sending    --
+                    --    appendEntry request because it can respond to the     --
+                    --    client only if the majority of the cluster appended   --
+                    --    the entry;                                            --
+                    --  - Leader crash: It will not respond to the client and   --
+                    --    eventually all the follower that appended the entry   --
+                    --    will delete it.                                       --
+                    --------------------------------------------------------------
+                    while not Queue.Is_Empty (Net.all (id).all) loop
+                        HandleMessage
+                           (Id,--
+                            Net,--
+                            Self,--
+                            Queue.Dequeue (Net.all (Id).all));
+                        if (Clock - Self.all.LastPacketTimestamp) >
+                           Self.all.HeartbeatTimeoutDuration
+                        then
+                            Broadcast
+                               (Id, Net,
+                                Message.AppendEntry'
+                                   (Self.all.CurrentTerm, Id, 0, 0,
+                                    LogEntryVector.Empty_Vector,
+                                    Self.all.CommitIndex));
+                            Self.all.LastPacketTimestamp := Clock;
+                        end if;
+                    end loop;
+                end loop;
+                return
+                   Message.ClientResponse'
+                      (True, To_Unbounded_String ("Everything fine."));
+            end;
+        end LeaderBehaviour;
+
+        procedure FollowerBehaviour is
+        begin
+            --  Redirect the client call to Leader
+            null;
+        end FollowerBehaviour;
+    begin
+        case Self.all.CurrentType is
+            when LEADER =>
+                return LeaderBehaviour;
+            when others =>
+                return
+                   Message.ClientResponse'
+                      (False, To_Unbounded_String ("Not a leader."));
+
+        end case;
+    end HandleClientRequest;
+
     --------------------------------------------------------------------------- PROCEDURES
 
     procedure Broadcast
@@ -213,9 +347,6 @@ package body Node is
             HandleRequestVoteResponse
                (Id, Net, Self, Message.RequestVoteResponse (Msg));
 
-        elsif Msg in Message.ClientRequest'Class then
-            HandleClientRequest (Id, Net, Self, Message.ClientRequest (Msg));
-
         end if;
     end HandleMessage;
 
@@ -252,19 +383,26 @@ package body Node is
                 Respond
                    (Net, --
                     Message.AppendEntryResponse'
-                       (Id,--
-                        Self.all.CurrentTerm,--
+                       (Self.all.CurrentTerm,--
+                        Id,--
                         False),--
                     MessageLeaderId);
                 return;
+            else
+                Self.all.LastPacketTimestamp := Clock;
+                Self.all.CurrentLeader       := Msg.LeaderId;
             end if;
 
             if not Msg.LogEntries.Is_Empty then
+                Logger.Log (LogFileName, "Received Append Entry");
 
                 declare
-                    Element : LogEntry.LogEntry :=
-                       Self.all.Log (MessagePrevLogIndex);
+
+                    Element : LogEntry.LogEntry;
+
                 begin
+
+                    Element := Self.all.Log (MessagePrevLogIndex);
 
                     --  3. If an existing entry conflicts with a new one (same index
                     --     but different terms), delete the existing entry and all that
@@ -291,15 +429,16 @@ package body Node is
                     Respond
                        (Net,
                         Message.AppendEntryResponse'
-                           (Id, --
-                            Self.all.CurrentTerm,--
-                            True),
+                           (Self.all.CurrentTerm,--
+                            Id,--
+                            True),--
                         MessageLeaderId);
 
                 exception
 
                     --  No element in Log at index MessagePrevLogIndex
                     when others =>
+                        Logger.Log (LogFileName, "Empty Log");
 
                         --  If MessagePrevLogIndex = 0 append the message else return false
                         --  else respond false
@@ -312,36 +451,33 @@ package body Node is
                             Self.all.CommitIndex :=
                                Integer'Min
                                   (MessageLeaderCommitIndex,
-                                   MessageLogEntries
-                                      (MessageLogEntries.Last_Index)
-                                      .Index);
+                                   Self.all.Log.Last_Index);
 
                             Respond
                                (Net, --
                                 Message.AppendEntryResponse'
-                                   (Id, --
-                                    Self.all.CurrentTerm,--
+                                   (Self.all.CurrentTerm,--
+                                    Id,--
                                     True),--
                                 MessageLeaderId);
+                            Logger.Log (LogFileName, "Append successful");
 
                         else
 
                             Respond
                                (Net, --
                                 Message.AppendEntryResponse'
-                                   (Id, --
-                                    Self.all.CurrentTerm,--
+                                   (Self.all.CurrentTerm,--
+                                    Id,--
                                     False),--
                                 MessageLeaderId);
+                            Logger.Log (LogFileName, "Append fail");
 
                         end if;
 
                 end;
 
             end if;
-
-            Self.all.LastPacketTimestamp := Clock;
-            Self.all.CurrentLeader       := Msg.LeaderId;
 
         end FollowerBehaviour;
 
@@ -482,8 +618,15 @@ package body Node is
                     else
                         --  Entry successful
                         --  AppendCounter ++
-                        --
-                        null;
+                        Self.all.NextIndex (MessageSender) :=
+                           Self.all.NextIndex (MessageSender) + 1;
+                        Logger.Log
+                           (LogFileName,
+                            "Node " & Integer'Image (MessageSender) &
+                            " appended successfully. NextIndex(" &
+                            Integer'Image (MessageSender) & " ) = " &
+                            Integer'Image
+                               (Self.all.NextIndex (MessageSender)));
                     end if;
 
                 end;
@@ -647,118 +790,6 @@ package body Node is
                 FollowerBehaviour;
         end case;
     end HandleRequestVoteResponse;
-
-    procedure HandleClientRequest
-       (Id   : Integer; --
-        Net  : access QueueVector.Vector;--
-        Self : access NodeState; --
-        Msg  : Message.ClientRequest)
-    is
-
-        procedure LeaderBehaviour is
-
-            CurrentTerm  : Integer := Self.all.CurrentTerm;
-            PrevLogIndex : Integer;
-            PrevLogTerm  : Integer;
-            LogEntries   : LogEntryVector.Vector;
-            LeaderCommit : Integer := Self.all.CommitIndex;
-
-            NewEntry : LogEntry.LogEntry :=
-               LogEntry.LogEntry'
-                  (CurrentTerm, Self.all.NextIndex (Id), Msg.Peyload);
-
-            ToBroadcast : Message.AppendEntry;
-
-        begin
-            if Self.all.Log.Is_Empty then
-                PrevLogIndex := 0;
-                PrevLogTerm  := CurrentTerm;
-            else
-                PrevLogIndex := Self.all.Log (Self.all.Log.Last_Index).Index;
-                PrevLogIndex := Self.all.Log (Self.all.Log.Last_Index).Term;
-            end if;
-
-            LogEntries.Append (NewEntry);
-            ToBroadcast :=
-               Message.AppendEntry'
-                  (CurrentTerm,--
-                   Id,--
-                   PrevLogIndex,--
-                   PrevLogTerm,--
-                   LogEntries,--
-                   LeaderCommit);
-
-            --  Appends the command to its log as a new entry, then is-
-            --  sues AppendEntries RPCs in parallel to each of the other
-            --  servers to replicate the entry. When the entry has been
-            --  safely replicated (as described below), the leader applies
-            --  the entry to its state machine and returns the result of that
-            --  execution to the client
-
-            --  Append Entry in leader log
-            Self.all.Log.Append (NewEntry);
-            --  Update NextIndex(Id)
-            Self.all.NextIndex (Id) := Self.all.NextIndex (Id) + 1;
-            --  Restore of AppendedCounter in order to detect when to respond to the client
-            --  Self.all.AppendedCounter := 0;
-            --  Broadcast AppendEntry
-            Broadcast (Id, Net, ToBroadcast);
-
-            declare
-
-                ExpectedNextIndex : Integer := Self.all.NextIndex (Id);
-                NetLenght         : Integer := Integer (Net.all.Length / 2);
-
-            begin
-                --  Repeat till at least N nodes has NextIndex synced, whit N=Net.Lenght\2
-                while not
-                   (EqualityCount (Self.all.NextIndex, ExpectedNextIndex) >
-                    Integer (NetLenght / 2))
-                loop
-                    --------------------------------------------------------------
-                    -- The point is that after a broadcast of the appendEntry   --
-                    -- we have three possibility:                               --
-                    --  - Follower respond true: Then NextIndex(FollowerId)     --
-                    --    will be equal to NextIdex(Leader);                    --
-                    --  - Follower respond false: Then leader keep send Entries --
-                    --    till NextIndex(Follower) will be equal to             --
-                    --    NextIndex(Leader);                                    --
-                    --  - Follower doesent respond: Then leader keep sending    --
-                    --    appendEntry request because it can respond to the     --
-                    --    client only if the majority of the cluster appended   --
-                    --    the entry;                                            --
-                    --  - Leader crash: It will not respond to the client and   --
-                    --    eventually all the follower that appended the entry   --
-                    --    will delete it.                                       --
-                    --------------------------------------------------------------
-                    while not Queue.Is_Empty (Net.all (id).all) loop
-                        HandleMessage
-                           (Id,--
-                            Net,--
-                            Self,--
-                            Queue.Dequeue (Net.all (Id).all));
-                    end loop;
-                    Broadcast (Id, Net, ToBroadcast);
-                end loop;
-                --  RESPOND TO CLIENT
-            end;
-        end LeaderBehaviour;
-
-        procedure FollowerBehaviour is
-        begin
-            --  Redirect the client call to Leader
-            null;
-        end FollowerBehaviour;
-    begin
-        case Self.all.CurrentType is
-            when LEADER =>
-                LeaderBehaviour;
-
-            when others =>
-                null;
-
-        end case;
-    end HandleClientRequest;
 
     procedure TimeoutManagment
        (Id   : Integer;--

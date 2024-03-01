@@ -137,11 +137,11 @@ private
     Net  : access QueueVector.Vector;--
     Self : access NodeState; --
     Msg  : Message.RequestVoteResponse);
-  procedure HandleClientRequest
+  function HandleClientRequest
    (Id   : Integer; --
     Net  : access QueueVector.Vector;--
     Self : access NodeState; --
-    Msg  : Message.ClientRequest);
+    Msg  : Message.ClientRequest) return Message.ClientResponse;
 
   --  Broadcast procedure
   procedure Broadcast

@@ -30,15 +30,25 @@ begin
    N4 := new Node.Node (4, QVector'Access, BG (4));
 
    declare
-      A, N, V : String (1 .. 1);
+      Req : Message.ClientRequest;
+      Res : Message.ClientResponse;
+      PP  : Payload.Payload;
    begin
-      loop
-         Put_Line ("1 : Node managment, 3: Client operation");
-         Put ("Choice: ");
-         Get (A);
-         
-        
-      end loop;
+      delay 3.0;
+      Put_Line ("Sending request");
+      PP  := Payload.EmptyPayload;
+      Req := Message.ClientRequest'(Peyload => PP);
+      N1.Request (Req, Res);
+      if Res.Result = False then
+         N2.Request (Req, Res);
+      end if;
+      if Res.Result = False then
+         N3.Request (Req, Res);
+      end if;
+      if Res.Result = False then
+         N4.Request (Req, Res);
+      end if;
+      Put_Line ("Done");
    end;
 
 end Main;
