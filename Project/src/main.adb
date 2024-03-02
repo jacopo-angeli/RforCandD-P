@@ -1,11 +1,19 @@
+with Ada.Numerics.Big_Numbers.Big_Integers;
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Text_IO;           use Ada.Text_IO;
 with Node;                  use Node;
 with Payload;
 with Queue;
 with Message;
+with Ada.Numerics.Discrete_Random;
+with Ada.Real_Time; use Ada.Real_Time;
 
 procedure Main is
+
+   package Integer_Random is new Ada.Numerics.Discrete_Random (Integer);
+   Gen : Integer_Random.Generator;
+   num : Integer;
+
    Q1 : QueueAccess := new Queue.Queue;
    Q2 : QueueAccess := new Queue.Queue;
    Q3 : QueueAccess := new Queue.Queue;
@@ -14,6 +22,7 @@ procedure Main is
    N1, N2, N3, N4 : NodeAccess;
 
 begin
+
    QueueVector.Append (QVector, Q1);
    QueueVector.Append (QVector, Q2);
    QueueVector.Append (QVector, Q3);
@@ -31,68 +40,84 @@ begin
 
    declare
       Action : String (1 .. 1);
-   begin
-      loop
-         Put ("1 - Node managment, 2 - Send request :: ");
-         Get (Action);
-         case Integer'Value (Action) is
+      N      : String (1 .. 1);
+      Igen : Integer;
+      begin
+ 
+     -- for N in 0..3 loop
+      Integer_Random.Reset (Gen);
+      num := Integer_Random.Random (Gen); --per rimanere tra uno e dieci (prova)
+      Put_Line (Integer'Image(num));
+      Igen := To_Integer(Gen); -- TODO Understand how to cast Gen to Integer
+      
+      if (num >= Igen/2 and num <= (Igen+(Igen/2))) then
+         BG (Integer'Value (N)).all := True; --for poisson rules ragionamento eremitico durato circa 30 secondi
+      else
+         BG (Integer'Value (N)).all := False;
+      end if;
+     -- end loop;
+      --loop
+      --Put ("1 - Node managment, 2 - Send request :: ");
+      --Get (Action);
+      --case Integer'Value (Action) is
 
-            when 1 =>
-               declare
-                  N : String (1 .. 1);
-               begin
-                  Put ("1 - Stop, 2 - Resume :: ");
-                  Get (Action);
-                  Put ("Node number :: ");
-                  Get (N);
-                  case Integer'Value (Action) is
-                     when 1 =>
-                        BG (Integer'Value (N)).all := True;
+      --when 1 =>
+      --declare
+      -- N : String (1 .. 1);
+      --begin
+      -- Put ("1 - Stop, 2 - Resume :: ");
+      --Get (Action);
+      --Put ("Node number :: ");
+      --Get (N);
+      --case Integer'Value (Action) is
+      --   when 1 =>
+      --      BG (Integer'Value (N)).all := True;
 
-                     when 2 =>
-                        BG (Integer'Value (N)).all := False;
+      --   when 2 =>
+      --      BG (Integer'Value (N)).all := False;
 
-                     when others =>
-                        Put_Line ("Invalid input.");
+      -- when others =>
+      --  Put_Line ("Invalid input.");
 
-                  end case;
-               end;
+      --end case;
+      --end;
 
-            when 2 =>
-               declare
+      --when 2 =>
+      -- declare
 
-                  ReqType : String (1 .. 1);
+      --  ReqType : String (1 .. 1);
 
-                  Req : Message.ClientRequest;
-                  Res : Message.ClientResponse;
-                  PP  : Payload.Payload;
+      --Req : Message.ClientRequest;
+      --Res : Message.ClientResponse;
+      --PP  : Payload.Payload;
 
-               begin
-                  Put ("Request type :: ");
-                  Get (ReqType);
-                  case Integer'Value (ReqType) is
-                     when others =>
-                        --  TODO : Manage of different type of request
-                        PP  := Payload.EmptyPayload;
-                        Req := Message.ClientRequest'(Peyload => PP);
-                        --  N1.Request (Req, Res);
-                        --  if Res.Result = False then
-                        --     N2.Request (Req, Res);
-                        --  end if;
-                        --  if Res.Result = False then
-                        --     N3.Request (Req, Res);
-                        --  end if;
-                        --  if Res.Result = False then
-                        --     N4.Request (Req, Res);
-                        --  end if;
-                  end case;
-                  Put_Line
-                    ("Response {Result : " & Boolean'Image(Res.Result) & ", body : " & To_String(Res.Msg) & "}");
-               end;
-            when others =>
-               Put_Line ("Choice not valid.");
-         end case;
-      end loop;
+      --begin
+      -- Put ("Request type :: ");
+      -- Get (ReqType);
+      --case Integer'Value (ReqType) is
+      -- when others =>
+      --  TODO : Manage of different type of request
+      --  PP  := Payload.EmptyPayload;
+      --Req := Message.ClientRequest'(Peyload => PP);
+      --  N1.Request (Req, Res);
+      --  if Res.Result = False then
+      --     N2.Request (Req, Res);
+      --  end if;
+      --  if Res.Result = False then
+      --     N3.Request (Req, Res);
+      --  end if;
+      --  if Res.Result = False then
+      --     N4.Request (Req, Res);
+      --  end if;
+      --end case;
+      --Put_Line
+      --("Response {Result : " & Boolean'Image (Res.Result) &
+      --  ", body : " & To_String (Res.Msg) & "}");
+      -- end;
+      --when others =>
+      -- Put_Line ("Choice not valid.");
+      --end case;
+      --end loop;
    end;
 
 end Main;
