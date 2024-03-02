@@ -6,13 +6,11 @@ with Payload;
 with Queue;
 with Message;
 with Ada.Numerics.Discrete_Random;
-with Ada.Real_Time; use Ada.Real_Time;
+with Ada.Real_Time;         use Ada.Real_Time;
 
 procedure Main is
 
    package Integer_Random is new Ada.Numerics.Discrete_Random (Integer);
-   Gen : Integer_Random.Generator;
-   num : Integer;
 
    Q1 : QueueAccess := new Queue.Queue;
    Q2 : QueueAccess := new Queue.Queue;
@@ -39,23 +37,27 @@ begin
    N4 := new Node.Node (4, QVector'Access, BG (4));
 
    declare
-      Action : String (1 .. 1);
-      N      : String (1 .. 1);
-      Igen : Integer;
-      begin
- 
-     -- for N in 0..3 loop
-      Integer_Random.Reset (Gen);
-      num := Integer_Random.Random (Gen); --per rimanere tra uno e dieci (prova)
-      Put_Line (Integer'Image(num));
-      Igen := To_Integer(Gen); -- TODO Understand how to cast Gen to Integer
+      Action      : String (1 .. 1);
+      N           : String (1 .. 1);
+      Generated   : Integer := 0;
+      LowerBound  : Integer := 0;
+      UpperBound  : Integer := 10;
+      Probability : Integer := 5;
+      Gen : Integer_Random.Generator;
+   begin
       
-      if (num >= Igen/2 and num <= (Igen+(Igen/2))) then
-         BG (Integer'Value (N)).all := True; --for poisson rules ragionamento eremitico durato circa 30 secondi
+      Generated:=Integer_Random.Random(Gen) mod UpperBound + LowerBound; --Genero un intero random nell intervallo [LowerBound, UpperBound]
+      -- for N in 0..3 loop
+      
+
+      if (Generated >= Probability / 2 and Generated <= (Probability + (Probability / 2))) then
+         BG (Integer'Value (N)).all :=
+           True; --for poisson rules ragionamento eremitico durato circa 30 secondi
       else
          BG (Integer'Value (N)).all := False;
       end if;
-     -- end loop;
+      -- end loop;
+
       --loop
       --Put ("1 - Node managment, 2 - Send request :: ");
       --Get (Action);
