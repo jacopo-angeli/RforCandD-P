@@ -24,9 +24,29 @@ package body Node is
         Self        : aliased NodeState := NodeStateInit (NodesNumber);
 
         --  Logger
-        LogEntryFileName : constant String := "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
-        LogFileName : constant String :=
+        LogEntryFileName : constant String :=
            "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
+        LogFileName      : constant String :=
+           "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
+
+        procedure CrashSimulator is
+        begin
+            if (Paused.all) then
+                Put_Line (Boolean'Image (Paused.all));
+            end if;
+            if Paused.all then
+                Logger.Log (LogFileName, "Node crashed.");
+                while Paused.all loop
+                    delay 1.0;
+                end loop;
+                --  Clear of all the received message while in crash state
+                Queue.Clear (Net.all (Id).all);
+                --  Current type to FOLLOWER
+                Self.CurrentType         := FOLLOWER;
+                Self.LastPacketTimestamp := Clock;
+                Logger.Log (LogFileName, "Node up.");
+            end if;
+        end CrashSimulator;
 
     begin
 
@@ -44,20 +64,30 @@ package body Node is
                 end Request;
             or
                 delay 0.0;
-                --  Crash simulation
-                if (Paused.all) then Put_line(Boolean'Image(Paused.all)); end if;
-                if Paused.all then
-                    Logger.Log (LogFileName, "Node crashed.");
-                    while Paused.all loop
-                        delay 1.0;
-                    end loop;
-                    --  Clear of all the received message while in crash state
-                    Queue.Clear (Net.all (Id).all);
-                    --  Current type to FOLLOWER
-                    Self.CurrentType         := FOLLOWER;
-                    Self.LastPacketTimestamp := Clock;
-                    Logger.Log (LogFileName, "Node up.");
-                end if;
+
+                CrashSimulator;
+
+                --  Sensed Quake
+                declare
+
+                    Generated   : Integer := 0;
+                    UpperBound  : Integer := 10;
+                    Probability : Integer := 9;
+                    package Integer_Random is new Ada.Numerics.Discrete_Random
+                       (Integer);
+                    Gen : Integer_Random.Generator;
+                
+                begin
+                    
+                    Integer_Random.Reset (Gen);
+                    Generated := Integer_Random.Random (Gen) mod UpperBound;
+
+                    --  10% Probability
+                    if Generated >= Probability then
+                        Put_line("Quake sensed");
+                    end if;
+
+                end;
 
                 --  Message handle
                 while not Queue.Is_Empty (Net.all (id).all) loop
@@ -244,7 +274,7 @@ package body Node is
                     --    will delete it.                                       --
                     --------------------------------------------------------------
                     while not Queue.Is_Empty (Net.all (id).all) loop
-                        
+
                         HandleMessage
                            (Id,--
                             Net,--
@@ -522,9 +552,11 @@ package body Node is
         end CandidateBehaviour;
 
         procedure LeaderBehaviour is
+
             MessageTerm     : Integer := AppendEntry (Msg).Term;
             MessageLeaderId : Integer := AppendEntry (Msg).LeaderId;
             NetLenght       : Integer := Integer (Net.all.Length);
+
         begin
 
             Self.all.CurrentTerm         := MessageTerm;
@@ -532,7 +564,7 @@ package body Node is
             Self.all.LastPacketTimestamp := Clock;
 
         end LeaderBehaviour;
-    
+
     begin
         case Self.all.CurrentType is
             when FOLLOWER =>
