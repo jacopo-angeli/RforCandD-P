@@ -74,6 +74,10 @@ package body Node is
 
                     Generated   : Integer := 0;
                     UpperBound  : Integer := Integer'Last;
+                    MessageSent : Message.ClientRequest;
+                    MessagePayload : Payload.Payload;
+                    QuackeEvent : Float;
+                    UserTime : String (1..3);
                     Probability : Integer :=
                        Integer'Last - (Integer'Last * Integer (10 / 100));
                     package Integer_Random is new Ada.Numerics.Discrete_Random
@@ -90,10 +94,17 @@ package body Node is
                     end ProbE;
 
                 begin
-
+                    
+                    QuackeEvent:=ProbE(Get(Integer'Value(UserTime)));
                     Integer_Random.Reset (Gen);
                     Generated := Integer_Random.Random (Gen) mod UpperBound;
-
+                    if(Generated>=QuackeEvent) then
+                        -- Collect data from earthquake and then broadcast the cluster
+                        MessagePayload:=Payload.CreatePayload(Frequency => 55.5, Amplitude => 77.7, Duration => 25, Magnitudo => 5, Depth => 77.7); --FAKE DATA JUST TO SIMULATE
+                        MessageSent.Peyload:=MessagePayload;
+                        Self.DB.Append(MessagePayload);
+                        Broadcast(SelfId => Id, Net => Net, Msg => MessageSent);
+                        end if;
                     --  10% Probability
                     --  Put_Line(Integer'Image(Generated));
                     Put_Line (Integer'Image (Generated));
