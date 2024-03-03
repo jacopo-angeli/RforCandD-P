@@ -4,6 +4,7 @@ with Ada.Strings.Fixed;
 with Ada.Numerics.Discrete_Random;
 with Ada.Containers.Vectors;
 with Ada.Strings.Unbounded;
+with Ada.Numerics.Elementary_Functions;
 
 with Message;
 with Logger;
@@ -18,6 +19,7 @@ package body Node is
     use Ada.Containers;
     use Payload;
     use Ada.Strings.Unbounded;
+    use Ada.Numerics.Elementary_Functions;
 
     task body Node is
         NodesNumber : Integer           := Integer (Net.all.Length / 2);
@@ -71,20 +73,32 @@ package body Node is
                 declare
 
                     Generated   : Integer := 0;
-                    UpperBound  : Integer := 10;
-                    Probability : Integer := 9;
+                    UpperBound  : Integer := Integer'Last;
+                    Probability : Integer :=
+                       Integer'Last - (Integer'Last * Integer (10 / 100));
                     package Integer_Random is new Ada.Numerics.Discrete_Random
                        (Integer);
                     Gen : Integer_Random.Generator;
-                
+
+                    function ProbE (x : Integer) return Float is
+                        LambdaX : Float;
+                        PInv    : Float;
+                    begin
+                        LambdaX := 0.1 * (x / 10);
+                        PInv    := Exp (-LambdaX);
+                        return 1 - Pinv;
+                    end ProbE;
+
                 begin
-                    
+
                     Integer_Random.Reset (Gen);
                     Generated := Integer_Random.Random (Gen) mod UpperBound;
 
                     --  10% Probability
+                    --  Put_Line(Integer'Image(Generated));
+                    Put_Line (Integer'Image (Generated));
                     if Generated >= Probability then
-                        Put_line("Quake sensed");
+                        Put_Line ("Quake sensed");
                     end if;
 
                 end;
