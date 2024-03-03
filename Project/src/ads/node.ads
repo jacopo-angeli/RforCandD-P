@@ -81,6 +81,9 @@ package Node is
     HeartbeatTimeoutDuration : aliased Time_Span;
     CandidationTimestamp     : aliased Time;
     ElectionTimeoutDuration  : aliased Time_Span;
+    
+    LastMoonuakeTimestamp    : aliased Time;
+    
 
     CurrentLeader : aliased Integer;
     VotesCounter  : aliased Integer;
@@ -100,8 +103,7 @@ package Node is
     Net    : access QueueVector.Vector; --
     Paused : access Boolean) is
     entry Request
-     (Msg   : in     Message.ClientRequest;
-      Response :    out Message.ClientResponse);
+     (Msg : in Message.ClientRequest; Response : out Message.ClientResponse);
   end Node;
 
   type NodeAccess is access all Node;
@@ -109,7 +111,7 @@ package Node is
 private
 
   -- NodeState init function
-  function NodeStateInit(NumberOfNodes : Integer) return NodeState;
+  function NodeStateInit (NumberOfNodes : Integer) return NodeState;
 
   --  Handle message procedures
   procedure HandleMessage

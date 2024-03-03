@@ -14,8 +14,6 @@ package Payload is
       Depth     : Float;
    end record;
 
-   function EmptyPayload return Payload;
-   function "=" (Left, Right : Payload) return Boolean;
    package PayloadVector is new Ada.Containers.Vectors
      (Index_Type   => Natural,--
       Element_Type => Payload,--
