@@ -1,12 +1,15 @@
 package body Payload is
     function EmptyPayload return Payload is
     begin
-        return Payload'
-              (EMPTY, To_Unbounded_String (""), To_Unbounded_String (""), 0.0,
-               To_Unbounded_String (""), To_Unbounded_String (""));
+        return
+           Payload'
+              (Frequency => 0.0, Amplitude => 0.0, Duration => 0,
+               Magnitudo => 0, Depth => 0.0);
+
     end EmptyPayload;
     function "=" (Left, Right : Payload) return Boolean is
     begin
         return Left.Sort = Right.Sort;
     end "=";
 end Payload;
+
