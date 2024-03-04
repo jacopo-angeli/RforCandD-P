@@ -63,11 +63,10 @@ package body Node is
                 function ProbE (x : Float) return Float is
                     LambdaX : Float;
                 begin
-                    LambdaX := 0.1 * (x / 10.0);
+                    LambdaX := 0.01 * (x / 10.0);
                     return Exp (-LambdaX);
                 end ProbE;
 
-                package Rand_IO is new Ada.Text_IO.Float_IO (Num => Float);
                 Gen : Ada.Numerics.Float_Random.Generator;
 
                 N1, N2 : Float;
@@ -101,8 +100,10 @@ package body Node is
                             PrevLogTerm := Self.Log (Self.Log.Last_Index).Term;
                         end if;
 
-                        Load:= Payload.CreatePayload
-                        --  LogEntries.Append(LogEntry.LogEntry'(PrevLogTerm +1, PrevLogIndex +1,));
+                        Load := Payload.RandomPayload;
+                        LogEntries.Append
+                           (LogEntry.LogEntry'
+                               (Self.CurrentTerm, PrevLogIndex + 1, Load));
 
                         Msg :=
                            Message.AppendEntry'
@@ -113,7 +114,7 @@ package body Node is
                                LogEntries,--
                                LeaderCommit);
 
-                        --  Broadcast(Id, Net'Access, )
+                        Respond (Net, Msg, Self.CurrentLeader);
                         Self.LastMoonquakeTimestamp := Clock;
 
                     end if;
@@ -146,7 +147,9 @@ package body Node is
                 CrashSimulator;
 
                 --  Sensed Quake
-                QuakeSimulation;
+                if Self.CurrentType /= LEADER then
+                    QuakeSimulation;
+                end if;
 
                 --  Message handle
                 while not Queue.Is_Empty (Net.all (id).all) loop
@@ -155,6 +158,9 @@ package body Node is
                         Net,--
                         Self'Access,--
                         Queue.Dequeue (Net.all (Id).all));
+
+                    --  TimeoutMangment
+                    TimeoutManagment (Id, Net, Self'Access);
                 end loop;
 
                 --  TimeoutMangment
@@ -178,8 +184,8 @@ package body Node is
         Integer_Random.Reset (Gen);
 
         -- Timeout duration in milliseconds
-        T1 := Milliseconds (Integer_Random.Random (Gen) mod 150 + 150);
-        T2 := Milliseconds (Integer_Random.Random (Gen) mod 50 + 50);
+        T1 := Milliseconds (Integer_Random.Random (Gen) mod 300 + 300);
+        T2 := Milliseconds (Integer_Random.Random (Gen) mod 150 + 150);
 
         NextIndex.Append (1, Ada.Containers.Count_Type (NumberOfNodes));
         MatchIndex.Append (0, Ada.Containers.Count_Type (NumberOfNodes));
@@ -613,15 +619,24 @@ package body Node is
 
         procedure LeaderBehaviour is
 
-            MessageTerm     : Integer := AppendEntry (Msg).Term;
-            MessageLeaderId : Integer := AppendEntry (Msg).LeaderId;
+            MessageTerm     : Integer := Msg.Term;
+            MessageLeaderId : Integer := Msg.LeaderId;
             NetLenght       : Integer := Integer (Net.all.Length);
 
         begin
 
-            Self.all.CurrentTerm         := MessageTerm;
-            Self.all.CurrentType         := FOLLOWER;
-            Self.all.LastPacketTimestamp := Clock;
+            Put_Line
+               (Integer'Image (MessageTerm) & " " &
+                Integer'Image (Self.all.CurrentTerm));
+            --  TODO : Change
+            if MessageTerm > Self.all.CurrentTerm then
+                Self.all.CurrentTerm         := MessageTerm;
+                Self.all.CurrentType         := FOLLOWER;
+                Self.all.LastPacketTimestamp := Clock;
+            else
+
+                Logger.Log (LogFileName, "AppendEntry from Follower");
+            end if;
 
         end LeaderBehaviour;
 
