@@ -113,9 +113,12 @@ package body Node is
                                PrevLogTerm, --
                                LogEntries,--
                                LeaderCommit);
-
-                        Respond (Net, Msg, Self.CurrentLeader);
-                        Self.LastMoonquakeTimestamp := Clock;
+                        if Self.CurrentType /= LEADER then
+                            Respond (Net, Msg, Self.CurrentLeader);
+                            Self.LastMoonquakeTimestamp := Clock;
+                        else 
+                            Net.Append(Msg);
+                        end if;
 
                     end if;
 
@@ -147,11 +150,8 @@ package body Node is
                 CrashSimulator;
 
                 --  Sensed Quake
-                --  TODO : Change in data propagation
-                if Self.CurrentType /= LEADER then
                     QuakeSimulation;
-                end if;
-
+                
                 --  Message handle
                 while not Queue.Is_Empty (Net.all (id).all) loop
                     HandleMessage
