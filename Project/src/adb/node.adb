@@ -147,6 +147,7 @@ package body Node is
                 CrashSimulator;
 
                 --  Sensed Quake
+                --  TODO : Change in data propagation
                 if Self.CurrentType /= LEADER then
                     QuakeSimulation;
                 end if;
