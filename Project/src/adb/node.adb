@@ -5,6 +5,7 @@ with Ada.Numerics.Discrete_Random;
 with Ada.Containers.Vectors;
 with Ada.Strings.Unbounded;
 with Ada.Numerics.Elementary_Functions;
+with Ada.Numerics.Float_Random;
 
 with Message;
 with Logger;
@@ -24,6 +25,8 @@ package body Node is
     task body Node is
         NodesNumber : Integer           := Integer (Net.all.Length / 2);
         Self        : aliased NodeState := NodeStateInit (NodesNumber);
+
+        TimeSpanFromLastQuakeGeneration : Time := Clock;
 
         --  Logger
         LogEntryFileName : constant String :=
@@ -50,6 +53,78 @@ package body Node is
             end if;
         end CrashSimulator;
 
+        procedure QuakeSimulation is
+        begin
+            declare
+
+                TimeSpanFromLastQuake : Time_Span :=
+                   Clock - Self.LastMoonquakeTimestamp;
+
+                function ProbE (x : Float) return Float is
+                    LambdaX : Float;
+                begin
+                    LambdaX := 0.1 * (x / 10.0);
+                    return Exp (-LambdaX);
+                end ProbE;
+
+                package Rand_IO is new Ada.Text_IO.Float_IO (Num => Float);
+                Gen : Ada.Numerics.Float_Random.Generator;
+
+                N1, N2 : Float;
+
+                Msg          : Message.AppendEntry;
+                CurrentTerm  : Integer := Self.CurrentTerm;
+                LeaderId     : Integer := Id;
+                PrevLogIndex : Integer;
+                PrevLogTerm  : Integer;
+                LogEntries   : LogEntryVector.Vector;
+                LeaderCommit : Integer := Self.CommitIndex;
+                Load         : Payload.Payload;
+
+            begin
+
+                Ada.Numerics.Float_Random.Reset (Gen);
+
+                if (Clock - TimeSpanFromLastQuakeGeneration) > Seconds (2) then
+
+                    N1 := Ada.Numerics.Float_Random.Random (Gen);
+                    N2 := ProbE (Float (To_Duration (TimeSpanFromLastQuake)));
+
+                    if N1 > N2 then
+
+                        if Self.Log.Is_Empty then
+                            PrevLogIndex := 0;
+                            PrevLogTerm  := Self.CurrentTerm;
+                        else
+                            PrevLogIndex :=
+                               Self.Log (Self.Log.Last_Index).Index;
+                            PrevLogTerm := Self.Log (Self.Log.Last_Index).Term;
+                        end if;
+
+                        Load:= Payload.CreatePayload
+                        --  LogEntries.Append(LogEntry.LogEntry'(PrevLogTerm +1, PrevLogIndex +1,));
+
+                        Msg :=
+                           Message.AppendEntry'
+                              (CurrentTerm,--
+                               LeaderId,--
+                               PrevLogIndex, --
+                               PrevLogTerm, --
+                               LogEntries,--
+                               LeaderCommit);
+
+                        --  Broadcast(Id, Net'Access, )
+                        Self.LastMoonquakeTimestamp := Clock;
+
+                    end if;
+
+                    TimeSpanFromLastQuakeGeneration := Clock;
+
+                end if;
+
+            end;
+        end QuakeSimulation;
+
     begin
 
         Logger.Log (LogFileName, "Node started.");
@@ -67,52 +142,11 @@ package body Node is
             or
                 delay 0.0;
 
+                --  Crash simulation
                 CrashSimulator;
 
                 --  Sensed Quake
-                declare
-
-                    Generated   : Integer := 0;
-                    UpperBound  : Integer := Integer'Last;
-                    MessageSent : Message.ClientRequest;
-                    MessagePayload : Payload.Payload;
-                    QuackeEvent : Float;
-                    UserTime : String (1..3);
-                    Probability : Integer :=
-                       Integer'Last - (Integer'Last * Integer (10 / 100));
-                    package Integer_Random is new Ada.Numerics.Discrete_Random
-                       (Integer);
-                    Gen : Integer_Random.Generator;
-
-                    function ProbE (x : Integer) return Float is
-                        LambdaX : Float;
-                        PInv    : Float;
-                    begin
-                        LambdaX := 0.1 * (x / 10);
-                        PInv    := Exp (-LambdaX);
-                        return 1 - Pinv;
-                    end ProbE;
-
-                begin
-                    
-                    QuackeEvent:=ProbE(Get(Integer'Value(UserTime)));
-                    Integer_Random.Reset (Gen);
-                    Generated := Integer_Random.Random (Gen) mod UpperBound;
-                    if(Generated>=QuackeEvent) then
-                        -- Collect data from earthquake and then broadcast the cluster
-                        MessagePayload:=Payload.CreatePayload(Frequency => 55.5, Amplitude => 77.7, Duration => 25, Magnitudo => 5, Depth => 77.7); --FAKE DATA JUST TO SIMULATE
-                        MessageSent.Peyload:=MessagePayload;
-                        Self.DB.Append(MessagePayload);
-                        Broadcast(SelfId => Id, Net => Net, Msg => MessageSent);
-                        end if;
-                    --  10% Probability
-                    --  Put_Line(Integer'Image(Generated));
-                    Put_Line (Integer'Image (Generated));
-                    if Generated >= Probability then
-                        Put_Line ("Quake sensed");
-                    end if;
-
-                end;
+                QuakeSimulation;
 
                 --  Message handle
                 while not Queue.Is_Empty (Net.all (id).all) loop
@@ -163,6 +197,7 @@ package body Node is
                CurrentType              => FOLLOWER,--
                HeartbeatTimeoutDuration => T2,--
                ElectionTimeoutDuration  => T1,--
+               LastMoonquakeTimestamp   => Clock,--
                CandidationTimestamp     => Clock, --
                CurrentLeader            => -1,--
                VotesCounter             => 0,--

@@ -13,7 +13,6 @@ package Payload is
       Magnitudo : Integer;
       Depth     : Float;
    end record;
-   function CreatePayload(Frequency : Float; Amplitude: Float; Duration : Integer; Magnitudo : Integer; Depth : Float) return Payload;
    package PayloadVector is new Ada.Containers.Vectors
      (Index_Type   => Natural,--
       Element_Type => Payload,--
