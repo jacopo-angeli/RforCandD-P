@@ -629,14 +629,15 @@ package body Node is
             Put_Line
                (Integer'Image (MessageTerm) & " " &
                 Integer'Image (Self.all.CurrentTerm));
-            --  TODO : Change
             if MessageTerm > Self.all.CurrentTerm then
                 Self.all.CurrentTerm         := MessageTerm;
                 Self.all.CurrentType         := FOLLOWER;
                 Self.all.LastPacketTimestamp := Clock;
             else
 
+                --  TODO Manage Append
                 Logger.Log (LogFileName, "AppendEntry from Follower");
+
             end if;
 
         end LeaderBehaviour;
