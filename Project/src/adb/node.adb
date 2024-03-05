@@ -63,7 +63,7 @@ package body Node is
                 function ProbE (x : Float) return Float is
                     LambdaX : Float;
                 begin
-                    LambdaX := 0.01 * (x / 10.0);
+                    LambdaX := 0.1 * (x / 10.0);
                     return Exp (-LambdaX);
                 end ProbE;
 
@@ -85,6 +85,8 @@ package body Node is
                 Ada.Numerics.Float_Random.Reset (Gen);
 
                 if (Clock - TimeSpanFromLastQuakeGeneration) > Seconds (2) then
+
+                    Logger.Log ("State_" & LogFileName, StateToString (Self));
 
                     N1 := Ada.Numerics.Float_Random.Random (Gen);
                     N2 := ProbE (Float (To_Duration (TimeSpanFromLastQuake)));
@@ -113,12 +115,14 @@ package body Node is
                                PrevLogTerm, --
                                LogEntries,--
                                LeaderCommit);
+
                         if Self.CurrentType /= LEADER then
                             Respond (Net, Msg, Self.CurrentLeader);
-                            Self.LastMoonquakeTimestamp := Clock;
                         else
                             Queue.Enqueue (Net.all (Id).all, Msg);
                         end if;
+
+                        Self.LastMoonquakeTimestamp := Clock;
 
                     end if;
 
@@ -508,7 +512,7 @@ package body Node is
 
                 begin
 
-                    Element := Self.all.Log (MessagePrevLogIndex);
+                    Element := Self.all.Log (MessagePrevLogIndex - 1);
 
                     --  3. If an existing entry conflicts with a new one (same index
                     --     but different terms), delete the existing entry and all that
@@ -523,14 +527,30 @@ package body Node is
                     --  4. Append any new entries not already in the log
                     --  LogEntryVector.Append
                     --     (Self.all.Log, MessageLogEntry);
+                    for El of MessageLogEntries loop
+                        Self.all.Log.Append (El);
+                        Logger.Log (LogFileName, "Entry appended");
+                    end loop;
 
                     --  5. If leaderCommit > commitIndex, set commitIndex =
                     --     min(leaderCommit, index of last new entry)
+                    Logger.Log
+                       (LogFileName,
+                        "Leader commit index:" &
+                        Integer'Image (MessageLeaderCommitIndex));
+                    Logger.Log
+                       (LogFileName,
+                        "Leader commit index:" &
+                        Integer'Image
+                           (MessageLogEntries (MessageLogEntries.Last_Index)
+                               .Index));
                     Self.all.CommitIndex :=
                        Integer'Min
                           (MessageLeaderCommitIndex,
                            MessageLogEntries (MessageLogEntries.Last_Index)
                               .Index);
+
+                    Logger.Log (LogFileName, "Append successful");
 
                     Respond
                        (Net,
@@ -552,6 +572,7 @@ package body Node is
 
                             for E of MessageLogEntries loop
                                 Self.all.Log.Append (E);
+                                Logger.Log (LogFileName, "Entry appended");
                             end loop;
 
                             Self.all.CommitIndex :=
@@ -620,39 +641,45 @@ package body Node is
 
         procedure LeaderBehaviour is
 
-            MessageTerm     : Integer := Msg.Term;
-            MessageLeaderId : Integer := Msg.LeaderId;
-            NetLenght       : Integer := Integer (Net.all.Length);
+            MessageTerm       : Integer               := Msg.Term;
+            MessageLeaderId   : Integer               := Msg.LeaderId;
+            NetLenght         : Integer := Integer (Net.all.Length);
+            MessageLogEntries : LogEntryVector.Vector := Msg.LogEntries;
 
-            ToBroadcast       : Message.AppendEntry :=
+            ToBroadcast : Message.AppendEntry :=
                (MessageTerm,--
                 Id,--
                 Msg.PrevLogIndex,--
                 Msg.PrevLogTerm,--
                 Msg.LogEntries,--
-                Msg.LeaderCommit);
+                Self.all.CommitIndex);
 
-            ExpectedNextIndex : Integer             := Self.all.NextIndex (Id);
+            ExpectedNextIndex : Integer := Self.all.NextIndex (Id);
 
         begin
-            Put_Line
-               (Integer'Image (MessageTerm) & " " &
-                Integer'Image (Self.all.CurrentTerm));
+
             if MessageTerm > Self.all.CurrentTerm then
+
                 Self.all.CurrentTerm         := MessageTerm;
                 Self.all.CurrentType         := FOLLOWER;
                 Self.all.LastPacketTimestamp := Clock;
 
             else
+
                 Logger.Log
                    (LogFileName,
-                    "AppendEntry from Leader due to earthquake sensed");
+                    "AppendEntry from " & Integer'Image (MessageLeaderId) &
+                    " due to earthquake sensed");
                 --Append Message LogEntries in the log, update index and then broadcast with AppendEntry
-                Self.all.Log.Append (Msg.LogEntries);
+                for E of MessageLogEntries loop
+                    Self.all.Log.Append (E);
+                end loop;
                 --  Update NextIndex(Id)
-                Self.all.NextIndex (Id) := Self.all.NextIndex (Id) + 1;
-            --  Broadcast AppendEntry
+                Self.all.NextIndex (Id) :=
+                   Self.all.NextIndex (Id) + Integer (Msg.LogEntries.Length);
+                --  Broadcast AppendEntry
                 Broadcast (Id, Net, ToBroadcast);
+
             end if;
         end LeaderBehaviour;
 
@@ -753,6 +780,7 @@ package body Node is
                         --  AppendCounter ++
                         Self.all.NextIndex (MessageSender) :=
                            Self.all.NextIndex (MessageSender) + 1;
+                        --     TODO Manage more than oone entry sent
                         Logger.Log
                            (LogFileName,
                             "Node " & Integer'Image (MessageSender) &
@@ -963,9 +991,13 @@ package body Node is
             --  Find the min of MatchIndex
             --  If it's > commitIndex them update CommitIndex
             declare
-                N : Integer := IntegerVectorInfimum (Self.all.MatchIndex);
+                N     : Integer := IntegerVectorInfimum (Self.all.NextIndex);
+                lastV : Integer := Self.all.CommitIndex;
             begin
                 Self.all.CommitIndex := Integer'Max (N, Self.all.CommitIndex);
+                if lastV /= Self.all.CommitIndex then
+                    Logger.Log (LogFileName, "New commit index.");
+                end if;
             end;
 
             -- Heartbeat managment

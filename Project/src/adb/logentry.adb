@@ -18,7 +18,7 @@ package body LogEntry is
         R : LogEntryVector.Vector;
     begin
         
-        for I in Start .. Start loop
+        for I in Start .. Stop loop
             R.Append (V (I));
         end loop;
 
