@@ -116,8 +116,8 @@ package body Node is
                         if Self.CurrentType /= LEADER then
                             Respond (Net, Msg, Self.CurrentLeader);
                             Self.LastMoonquakeTimestamp := Clock;
-                        else 
-                            Net.Append(Msg);
+                        else
+                            Queue.Enqueue (Net.all (Id).all, Msg);
                         end if;
 
                     end if;
@@ -150,8 +150,8 @@ package body Node is
                 CrashSimulator;
 
                 --  Sensed Quake
-                    QuakeSimulation;
-                
+                QuakeSimulation;
+
                 --  Message handle
                 while not Queue.Is_Empty (Net.all (id).all) loop
                     HandleMessage
@@ -624,8 +624,17 @@ package body Node is
             MessageLeaderId : Integer := Msg.LeaderId;
             NetLenght       : Integer := Integer (Net.all.Length);
 
-        begin
+            ToBroadcast       : Message.AppendEntry :=
+               (MessageTerm,--
+                Id,--
+                Msg.PrevLogIndex,--
+                Msg.PrevLogTerm,--
+                Msg.LogEntries,--
+                Msg.LeaderCommit);
 
+            ExpectedNextIndex : Integer             := Self.all.NextIndex (Id);
+
+        begin
             Put_Line
                (Integer'Image (MessageTerm) & " " &
                 Integer'Image (Self.all.CurrentTerm));
@@ -633,13 +642,18 @@ package body Node is
                 Self.all.CurrentTerm         := MessageTerm;
                 Self.all.CurrentType         := FOLLOWER;
                 Self.all.LastPacketTimestamp := Clock;
+
             else
-
-                --  TODO Manage Append
-                Logger.Log (LogFileName, "AppendEntry from Follower");
-
+                Logger.Log
+                   (LogFileName,
+                    "AppendEntry from Leader due to earthquake sensed");
+                --Append Message LogEntries in the log, update index and then broadcast with AppendEntry
+                Self.all.Log.Append (Msg.LogEntries);
+                --  Update NextIndex(Id)
+                Self.all.NextIndex (Id) := Self.all.NextIndex (Id) + 1;
+            --  Broadcast AppendEntry
+                Broadcast (Id, Net, ToBroadcast);
             end if;
-
         end LeaderBehaviour;
 
     begin
