@@ -80,7 +80,7 @@ package body Node is
                         end if;
                             Self.LastCrashTimestamp:=Clock;
                     end if;
-                    TimeSpanFromLastQuakeGeneration := Clock;
+                    TimeSpanFromLastCrashGeneration := Clock;
                 end if;
             end;
         end CrashSimulator;
