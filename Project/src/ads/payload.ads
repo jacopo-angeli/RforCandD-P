@@ -14,6 +14,7 @@ package Payload is
    end record;
 
    function RandomPayload return Payload;
+   function Payload_Stringify (obj : in Payload) return String;
 
    package PayloadVector is new Ada.Containers.Vectors
      (Index_Type   => Natural,--

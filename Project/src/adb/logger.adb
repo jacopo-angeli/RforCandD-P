@@ -28,25 +28,25 @@ package body Logger is
 
         Close (File);
     end Log;
-    procedure PrettyPrint (File_Name : String; Content : LogEntryVector.Vector)
+    procedure PrettyPrint (File_Name : String; Content : Payload.PayloadVector.Vector)
     is
         File : File_Type;
     begin
         begin
             Open
                (File => File, Mode => Append_File,
-                Name => ("logsEntry/" & File_Name & ".log"));
+                Name => ("logs/" & File_Name & ".log"));
             -- If the file opens successfully, it exists.
         exception
             when E : others =>
                 -- If an exception occurs, assume the file does not exist.
                 Create
                    (File => File, Mode => Append_File,
-                    Name => ("logsEntry/" & File_Name & ".log"));
+                    Name => ("logs/" & File_Name & ".log"));
         end;
         for I in Content.First_Index .. Content.Last_Index loop
             Put (File => File, Item => Image (Clock) & " $ ");
-            Put_Line (File => File, Item => (LogEntry.Entry_Stringify(Content(i))));
+            Put_Line (File => File, Item => (Payload.Payload_Stringify(Content(i))));
         end loop;
     end PrettyPrint;
 

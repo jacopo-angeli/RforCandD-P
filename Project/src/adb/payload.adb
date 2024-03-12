@@ -33,5 +33,13 @@ package body Payload is
                Magnitudo,--
                Depth);
     end RandomPayload;
+    function Payload_Stringify (obj : in Payload) return String is
+    begin
+        return
+           "{ Frequency: " & Float'Image (obj.Frequency) & ", Amplitude: " &
+           Float'Image (obj.Amplitude) & ", Duration: " &  Integer'Image(obj.Duration) & 
+           ", Magnitudo: " & Integer'Image(obj.Magnitudo) & 
+           ", Depth: " & Float'Image(obj.Depth) & "}";
+    end Payload_Stringify;
 
 end Payload;
