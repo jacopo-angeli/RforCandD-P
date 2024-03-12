@@ -83,6 +83,7 @@ package Node is
     ElectionTimeoutDuration  : aliased Time_Span;
     
     LastMoonquakeTimestamp    : aliased Time;
+    LastCrashTimestamp   : aliased Time;
 
     CurrentLeader : aliased Integer;
     VotesCounter  : aliased Integer;

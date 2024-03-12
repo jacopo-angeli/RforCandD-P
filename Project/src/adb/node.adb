@@ -27,6 +27,7 @@ package body Node is
         Self        : aliased NodeState := NodeStateInit (NodesNumber);
 
         TimeSpanFromLastQuakeGeneration : Time := Clock;
+        TimeSpanFromLastCrashGeneration : Time := Clock;
 
         --  Logger
         LogEntryFileName : constant String :=
@@ -35,22 +36,53 @@ package body Node is
            "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
 
         procedure CrashSimulator is
-        begin
-            if (Paused.all) then
-                Put_Line (Boolean'Image (Paused.all));
-            end if;
-            if Paused.all then
-                Logger.Log (LogFileName, "Node crashed.");
-                while Paused.all loop
-                    delay 1.0;
-                end loop;
-                --  Clear of all the received message while in crash state
-                Queue.Clear (Net.all (Id).all);
-                --  Current type to FOLLOWER
-                Self.CurrentType         := FOLLOWER;
-                Self.LastPacketTimestamp := Clock;
-                Logger.Log (LogFileName, "Node up.");
-            end if;
+            begin
+            declare
+
+                    TimeSpanFromLastCrash : Time_Span :=
+                    Clock - Self.LastCrashTimestamp;
+
+                    function ProbC (x : Float) return Float is
+                        LambdaX : Float;
+                    begin
+                        LambdaX := 0.01 * (x / 10.0);
+                        return Exp (-LambdaX);
+                    end ProbC;
+
+                    Gen : Ada.Numerics.Float_Random.Generator;
+
+                    N1, N2 : Float;
+                begin    
+                Ada.Numerics.Float_Random.Reset (Gen);
+                if (Clock - TimeSpanFromLastCrashGeneration) > Seconds (2) then
+
+                    Logger.Log ("State_" & LogFileName, StateToString (Self));
+
+                    N1 := Ada.Numerics.Float_Random.Random (Gen);
+                    N2 := ProbC (Float (To_Duration (TimeSpanFromLastCrash)));
+                    if(N1>N2) then 
+                        Paused.all:=true;
+                        if (Paused.all) then
+                            Put_Line (Boolean'Image (Paused.all));
+                        end if;
+                        if Paused.all then
+                            Logger.Log (LogFileName, "Node crashed.");
+                            while Paused.all loop
+                                delay 5.0;
+                                Paused.all:=false;
+                                --  Clear of all the received message while in crash state
+                                Queue.Clear (Net.all (Id).all);
+                                --  Current type to FOLLOWER
+                                Self.CurrentType         := FOLLOWER;
+                                Self.LastPacketTimestamp := Clock;
+                                Logger.Log (LogFileName, "Node up.");
+                            end loop;
+                        end if;
+                            Self.LastCrashTimestamp:=Clock;
+                    end if;
+                    TimeSpanFromLastQuakeGeneration := Clock;
+                end if;
+            end;
         end CrashSimulator;
 
         procedure QuakeSimulation is
@@ -209,6 +241,7 @@ package body Node is
                HeartbeatTimeoutDuration => T2,--
                ElectionTimeoutDuration  => T1,--
                LastMoonquakeTimestamp   => Clock,--
+               LastCrashTimestamp       => Clock, --
                CandidationTimestamp     => Clock, --
                CurrentLeader            => -1,--
                VotesCounter             => 0,--
