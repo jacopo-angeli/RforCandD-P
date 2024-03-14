@@ -28,9 +28,7 @@ package body Logger is
 
         Close (File);
     end Log;
-    
-    procedure PrettyPrint
-       (File_Name : String; Content : Payload.PayloadVector.Vector)
+    procedure PrettyPrint (File_Name : String; Content : Payload.PayloadVector.Vector)
     is
         File : File_Type;
     begin
@@ -47,6 +45,7 @@ package body Logger is
                     Name => ("logs/" & File_Name & ".log"));
         end;
         if Content.Is_Empty then
+        if Content.Is_Empty then --Empty DB
             Put (File => File, Item => Image (Clock) & " $ ");
             Put_Line (File => File, Item => "Empty Log");
         else
@@ -58,6 +57,14 @@ package body Logger is
             end loop;
         end if;
         Close (File);
+            Put_Line (File => File, Item => "Empty Payload");
+        else
+            for I in Content.First_Index .. Content.Last_Index loop
+               Put (File => File, Item => Image (Clock) & " $ "); --Print Payload DB
+               Put_Line (File => File, Item => (Payload.Payload_Stringify(Content(i))));
+            end loop;
+        end if;
+        Close(File);
     end PrettyPrint;
 
 end Logger;
