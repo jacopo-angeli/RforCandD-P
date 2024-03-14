@@ -44,10 +44,16 @@ package body Logger is
                    (File => File, Mode => Append_File,
                     Name => ("logs/" & File_Name & ".log"));
         end;
-        for I in Content.First_Index .. Content.Last_Index loop
+        if Content.Is_Empty then --Empty DB
             Put (File => File, Item => Image (Clock) & " $ ");
-            Put_Line (File => File, Item => (Payload.Payload_Stringify(Content(i))));
-        end loop;
+            Put_Line (File => File, Item => "Empty Payload");
+        else
+            for I in Content.First_Index .. Content.Last_Index loop
+               Put (File => File, Item => Image (Clock) & " $ "); --Print Payload DB
+               Put_Line (File => File, Item => (Payload.Payload_Stringify(Content(i))));
+            end loop;
+        end if;
+        Close(File);
     end PrettyPrint;
 
 end Logger;

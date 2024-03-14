@@ -57,8 +57,7 @@ package body Node is
                 if (Clock - TimeSpanFromLastCrashGeneration) > Seconds (2) then
 
                     Logger.Log ("State_" & LogFileName, StateToString (Self));
-                    -- TODO UNDERSTAND WHY PRETTYPRINT MAKES THE SYSTEM CRASH
-                   -- Logger.PrettyPrint("Payload" & LogFileName, Self.DB);
+                    Logger.PrettyPrint("Payload" & LogFileName, Self.DB);
 
                     N1 := Ada.Numerics.Float_Random.Random (Gen);
                     N2 := ProbC (Float (To_Duration (TimeSpanFromLastCrash)));
@@ -766,12 +765,10 @@ package body Node is
                 null;
             when LEADER =>
                 declare
-                    AppendedCounter : Integer:=0;
                     MessageSender  : Integer := Msg.Sender;
                     MessageSuccess : Boolean := Msg.Success;
                     MessageTerm    : Integer := Msg.Term;
 
-                    NetLenght : Integer := Integer (Net.all.Length);
 
                 begin
 
@@ -814,16 +811,10 @@ package body Node is
                     else
                         --  Entry successful
                         --  AppendCounter ++
-                        AppendedCounter:=AppendedCounter+1;
 
                         Self.all.NextIndex (MessageSender) :=
                            Self.all.NextIndex (MessageSender) + 1;
-                        
-                        if((AppendedCounter + 1) > Integer(NetLenght/2)) then
-                            Self.DB.Append(Self.Log(Self.Log.Last_Index).Peyload);
-                            AppendedCounter:=0;
-                        end if;
-
+            
                         Logger.Log
                            (LogFileName,
                             "Node " & Integer'Image (MessageSender) &
@@ -1021,6 +1012,7 @@ package body Node is
                 if CommitIndex > LastApplied then
                     Self.all.LastApplied := CommitIndex;
                     --  Apply(Self.all.Log(LastApplied));
+                    Self.DB.Append(Self.Log(Self.Log.Last_Index).Peyload);
                 end if;
             end;
         end AllServerRule;
