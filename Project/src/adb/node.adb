@@ -11,6 +11,7 @@ with Message;
 with Logger;
 with LogEntry;
 with Payload;
+with Config;
 
 package body Node is
     use Ada.Text_IO;
@@ -19,6 +20,7 @@ package body Node is
     use Message;
     use Ada.Containers;
     use Payload;
+    use Config;
     use Ada.Strings.Unbounded;
     use Ada.Numerics.Elementary_Functions;
 
@@ -36,34 +38,33 @@ package body Node is
            "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
 
         procedure CrashSimulator is
-            begin
+        begin
             declare
 
-                    TimeSpanFromLastCrash : Time_Span :=
-                    Clock - Self.LastCrashTimestamp;
+                TimeSpanFromLastCrash : Time_Span :=
+                   Clock - Self.LastCrashTimestamp;
 
-                    function ProbC (x : Float) return Float is
-                        LambdaX : Float;
-                    begin
-                        LambdaX := 0.01 * (x / 10.0);
-                        return Exp (-LambdaX);
-                    end ProbC;
+                function ProbC (x : Float) return Float is
+                    LambdaX : Float;
+                begin
+                    LambdaX := 0.01 * (x / 10.0);
+                    return Exp (-LambdaX);
+                end ProbC;
 
-                    Gen : Ada.Numerics.Float_Random.Generator;
+                Gen : Ada.Numerics.Float_Random.Generator;
 
-                    N1, N2 : Float;
-                begin    
+                N1, N2 : Float;
+            begin
                 Ada.Numerics.Float_Random.Reset (Gen);
-                if (Clock - TimeSpanFromLastCrashGeneration) > Seconds (2) then
+                if (Clock - TimeSpanFromLastCrashGeneration) > Seconds (1) then
 
                     Logger.Log ("State_" & LogFileName, StateToString (Self));
-                    -- TODO UNDERSTAND WHY PRETTYPRINT MAKES THE SYSTEM CRASH
-                   -- Logger.PrettyPrint("Payload" & LogFileName, Self.DB);
+                    Logger.PrettyPrint ("Payload" & LogFileName, Self.DB);
 
                     N1 := Ada.Numerics.Float_Random.Random (Gen);
                     N2 := ProbC (Float (To_Duration (TimeSpanFromLastCrash)));
-                    if(N1>N2) then 
-                        Paused.all:=true;
+                    if (N1 > N2) then
+                        Paused.all := True;
                         if (Paused.all) then
                             Put_Line (Boolean'Image (Paused.all));
                         end if;
@@ -71,7 +72,7 @@ package body Node is
                             Logger.Log (LogFileName, "Node crashed.");
                             while Paused.all loop
                                 delay 5.0;
-                                Paused.all:=false;
+                                Paused.all := False;
                                 --  Clear of all the received message while in crash state
                                 Queue.Clear (Net.all (Id).all);
                                 --  Current type to FOLLOWER
@@ -80,7 +81,7 @@ package body Node is
                                 Logger.Log (LogFileName, "Node up.");
                             end loop;
                         end if;
-                            Self.LastCrashTimestamp:=Clock;
+                        Self.LastCrashTimestamp := Clock;
                     end if;
                     TimeSpanFromLastCrashGeneration := Clock;
                 end if;
@@ -118,7 +119,7 @@ package body Node is
 
                 Ada.Numerics.Float_Random.Reset (Gen);
 
-                if (Clock - TimeSpanFromLastQuakeGeneration) > Seconds (2) then
+                if (Clock - TimeSpanFromLastQuakeGeneration) > Seconds (1) then
 
                     Logger.Log ("State_" & LogFileName, StateToString (Self));
 
@@ -223,8 +224,12 @@ package body Node is
         Integer_Random.Reset (Gen);
 
         -- Timeout duration in milliseconds
-        T1 := Milliseconds (Integer_Random.Random (Gen) mod 300 + 300);
-        T2 := Milliseconds (Integer_Random.Random (Gen) mod 150 + 150);
+        T1 :=
+           Milliseconds
+              (Integer_Random.Random (Gen) mod (MaxETD - MinETD) + MinETD);
+        T2 :=
+           Milliseconds
+              (Integer_Random.Random (Gen) mod (MaxHTD - MinHTD) + MinHTD);
 
         NextIndex.Append (1, Ada.Containers.Count_Type (NumberOfNodes));
         MatchIndex.Append (0, Ada.Containers.Count_Type (NumberOfNodes));
@@ -708,7 +713,7 @@ package body Node is
                 --Append Message LogEntries in the log, update index and then broadcast with AppendEntry
                 for E of MessageLogEntries loop
                     Self.all.Log.Append (E);
-                    
+
                 end loop;
                 --  Update NextIndex(Id)
                 Self.all.NextIndex (Id) :=
@@ -766,10 +771,10 @@ package body Node is
                 null;
             when LEADER =>
                 declare
-                    AppendedCounter : Integer:=0;
-                    MessageSender  : Integer := Msg.Sender;
-                    MessageSuccess : Boolean := Msg.Success;
-                    MessageTerm    : Integer := Msg.Term;
+                    AppendedCounter : Integer := 0;
+                    MessageSender   : Integer := Msg.Sender;
+                    MessageSuccess  : Boolean := Msg.Success;
+                    MessageTerm     : Integer := Msg.Term;
 
                     NetLenght : Integer := Integer (Net.all.Length);
 
@@ -814,14 +819,16 @@ package body Node is
                     else
                         --  Entry successful
                         --  AppendCounter ++
-                        AppendedCounter:=AppendedCounter+1;
+                        AppendedCounter := AppendedCounter + 1;
 
                         Self.all.NextIndex (MessageSender) :=
                            Self.all.NextIndex (MessageSender) + 1;
-                        
-                        if((AppendedCounter + 1) > Integer(NetLenght/2)) then
-                            Self.DB.Append(Self.Log(Self.Log.Last_Index).Peyload);
-                            AppendedCounter:=0;
+
+                        if ((AppendedCounter + 1) > Integer (NetLenght / 2))
+                        then
+                            Self.DB.Append
+                               (Self.Log (Self.Log.Last_Index).Peyload);
+                            AppendedCounter := 0;
                         end if;
 
                         Logger.Log
