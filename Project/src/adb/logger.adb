@@ -1,11 +1,18 @@
-with Ada.Text_IO;             use Ada.Text_IO;
-with Ada.Strings.Fixed;       use Ada.Strings.Fixed;
-with Ada.Calendar;            use Ada.Calendar;
-with Ada.Calendar.Formatting; use Ada.Calendar.Formatting;
+with Ada.Text_IO;
+with Ada.Strings.Fixed;
+with Ada.Calendar;
+with Ada.Calendar.Formatting;
 with LogEntry;
 with Ada.Strings.Unbounded;
+with Config;
 
 package body Logger is
+
+    use Config;
+    use Ada.Text_IO;
+    use Ada.Strings.Fixed;
+    use Ada.Calendar;
+    use Ada.Calendar.Formatting;
 
     procedure Log (File_Name : String; Content : String) is
         File : File_Type;
@@ -28,43 +35,37 @@ package body Logger is
 
         Close (File);
     end Log;
-    procedure PrettyPrint (File_Name : String; Content : Payload.PayloadVector.Vector)
+
+    procedure DB (File_Name : String; Content : Payload.PayloadVector.Vector)
     is
         File : File_Type;
     begin
         begin
             Open
-               (File => File, Mode => Append_File,
+               (File => File, --
+                Mode => DBLogFileType,--
                 Name => ("logs/" & File_Name & ".log"));
             -- If the file opens successfully, it exists.
         exception
             when E : others =>
                 -- If an exception occurs, assume the file does not exist.
                 Create
-                   (File => File, Mode => Append_File,
+                   (File => File, --
+                    Mode => DBLogFileType, --
                     Name => ("logs/" & File_Name & ".log"));
         end;
+        Put_Line (File => File, Item => Image (Clock) & " $ Log Content:");
         if Content.Is_Empty then
-        if Content.Is_Empty then --Empty DB
-            Put (File => File, Item => Image (Clock) & " $ ");
-            Put_Line (File => File, Item => "Empty Log");
+            Put_Line (File => File, Item => "Empty");
         else
             for I in Content.First_Index .. Content.Last_Index loop
-                Put (File => File, Item => Image (Clock) & " $ ");
                 Put_Line
                    (File => File,
                     Item => (Payload.Payload_Stringify (Content (I))));
             end loop;
         end if;
+        Put_Line (File, "");
         Close (File);
-            Put_Line (File => File, Item => "Empty Payload");
-        else
-            for I in Content.First_Index .. Content.Last_Index loop
-               Put (File => File, Item => Image (Clock) & " $ "); --Print Payload DB
-               Put_Line (File => File, Item => (Payload.Payload_Stringify(Content(i))));
-            end loop;
-        end if;
-        Close(File);
-    end PrettyPrint;
+    end DB;
 
 end Logger;

@@ -1,12 +1,15 @@
+with Ada.Text_IO;             use Ada.Text_IO;
 package Config is 
-    -------------------------------------------------  FAILURES
-    --  Network Failure Rate 
-    NetFR: Float := 0.0001;
-    --  Node Failure Rate Per Minutes 
-    NodeFR: Float := 0.1;
-    --  AverageNodeResumeTimeInSeconds 
-    ANRT: Duration := 5.0;
-    
+    ------------------------------------------------- FAILURE
+    --  Node Failure Rate per 10 seconds
+    NodeFR : Float := 1.0;
+    --  Network Failure Rate
+    NetFR : Float := 0.0;
+
+    ------------------------------------------------- LOGGER
+    --  Append_File(Append) or Out_File (Rewrite)
+    DBLogFileType : File_Mode := Out_File;
+
     ------------------------------------------------- TIMEOUTS
     --  MinElectionTimeoutDurationInMillisecond 
     MinETD: Integer := 300;

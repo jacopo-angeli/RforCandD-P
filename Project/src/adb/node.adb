@@ -58,15 +58,14 @@ package body Node is
                 Ada.Numerics.Float_Random.Reset (Gen);
                 if (Clock - TimeSpanFromLastCrashGeneration) > Seconds (1) then
 
-                    Logger.Log ("State_" & LogFileName, StateToString (Self));
-                    Logger.PrettyPrint ("Payload" & LogFileName, Self.DB);
+                    Logger.DB ("DB_" & LogFileName, Self.DB);
 
                     N1 := Ada.Numerics.Float_Random.Random (Gen);
                     N2 := ProbC (Float (To_Duration (TimeSpanFromLastCrash)));
                     if (N1 > N2) then
-                        Paused.all := True;
+                        Paused.all := False;
                         if (Paused.all) then
-                            Put_Line (Boolean'Image (Paused.all));
+                        null;
                         end if;
                         if Paused.all then
                             Logger.Log (LogFileName, "Node crashed.");
@@ -98,7 +97,7 @@ package body Node is
                 function ProbE (x : Float) return Float is
                     LambdaX : Float;
                 begin
-                    LambdaX := 0.1 * (x / 10.0);
+                    LambdaX := 0.01 * (x / 10.0);
                     return Exp (-LambdaX);
                 end ProbE;
 
@@ -138,9 +137,7 @@ package body Node is
                         end if;
 
                         Load := Payload.RandomPayload;
-                        LogEntries.Append
-                           (LogEntry.LogEntry'
-                               (Self.CurrentTerm, PrevLogIndex + 1, Load));
+                        LogEntries.Append (LogEntry.LogEntry'(0, 0, Load));
 
                         Msg :=
                            Message.AppendEntry'
@@ -445,6 +442,22 @@ package body Node is
     begin
         for I in Net.all.First_Index .. Net.all.Last_Index loop
             if I /= SelfId then
+
+                declare
+
+                    Gen : Ada.Numerics.Float_Random.Generator;
+                    N   : Float;
+
+                begin
+
+                    Ada.Numerics.Float_Random.Reset (Gen);
+                    N := Ada.Numerics.Float_Random.Random (Gen);
+
+                    if N > NetFR then
+                        null;
+                    end if;
+
+                end;
                 Queue.Enqueue (net.all (I).all, Msg);
             end if;
         end loop;
@@ -456,7 +469,22 @@ package body Node is
         Receiver : Integer)
     is
     begin
-        Queue.Enqueue (net.all (Receiver).all, Msg);
+        declare
+
+            Gen : Ada.Numerics.Float_Random.Generator;
+            N   : Float;
+
+        begin
+
+            Ada.Numerics.Float_Random.Reset (Gen);
+            N := Ada.Numerics.Float_Random.Random (Gen);
+
+            if N > NetFR then
+                null;
+            end if;
+
+            Queue.Enqueue (net.all (Receiver).all, Msg);
+        end;
     end Respond;
 
     procedure HandleMessage
@@ -543,7 +571,12 @@ package body Node is
                 Self.all.CurrentLeader       := Msg.LeaderId;
             end if;
 
-            if not Msg.LogEntries.Is_Empty then
+            if Msg.LogEntries.Is_Empty then
+
+                Self.all.CommitIndex :=
+                   Integer'Max (Msg.LeaderCommit, Self.all.CommitIndex);
+
+            else
                 Logger.Log (LogFileName, "Received Append Entry");
 
                 declare
@@ -629,6 +662,24 @@ package body Node is
                                 MessageLeaderId);
                             Logger.Log (LogFileName, "Append successful");
 
+                            Logger.Log
+                               (LogFileName,
+                                "Leader commit index:" &
+                                Integer'Image (MessageLeaderCommitIndex));
+                            Logger.Log
+                               (LogFileName,
+                                "Leader commit index:" &
+                                Integer'Image
+                                   (MessageLogEntries
+                                       (MessageLogEntries.Last_Index)
+                                       .Index));
+                            Self.all.CommitIndex :=
+                               Integer'Min
+                                  (MessageLeaderCommitIndex,
+                                   MessageLogEntries
+                                      (MessageLogEntries.Last_Index)
+                                      .Index);
+
                         else
 
                             Respond
@@ -681,20 +732,7 @@ package body Node is
 
         procedure LeaderBehaviour is
 
-            MessageTerm       : Integer               := Msg.Term;
-            MessageLeaderId   : Integer               := Msg.LeaderId;
-            NetLenght         : Integer := Integer (Net.all.Length);
-            MessageLogEntries : LogEntryVector.Vector := Msg.LogEntries;
-
-            ToBroadcast : Message.AppendEntry :=
-               (MessageTerm,--
-                Id,--
-                Msg.PrevLogIndex,--
-                Msg.PrevLogTerm,--
-                Msg.LogEntries,--
-                Self.all.CommitIndex);
-
-            ExpectedNextIndex : Integer := Self.all.NextIndex (Id);
+            MessageTerm : Integer := Msg.Term;
 
         begin
 
@@ -706,20 +744,75 @@ package body Node is
 
             else
 
-                Logger.Log
-                   (LogFileName,
-                    "AppendEntry from " & Integer'Image (MessageLeaderId) &
-                    " due to earthquake sensed");
-                --Append Message LogEntries in the log, update index and then broadcast with AppendEntry
-                for E of MessageLogEntries loop
-                    Self.all.Log.Append (E);
+                declare
+                    NetLenght         : Integer := Integer (Net.all.Length);
+                    MessageLogEntries : LogEntryVector.Vector :=
+                       Msg.LogEntries;
 
-                end loop;
-                --  Update NextIndex(Id)
-                Self.all.NextIndex (Id) :=
-                   Self.all.NextIndex (Id) + Integer (Msg.LogEntries.Length);
-                --  Broadcast AppendEntry
-                Broadcast (Id, Net, ToBroadcast);
+                    ToBroadcast : Message.AppendEntry;
+
+                    ToBroadcastTerm         : Integer := Self.all.CurrentTerm;
+                    ToBroadcastId           : Integer := Id;
+                    ToBroadcastPrevLogIndex : Integer;
+                    ToBroadcastPrevLogTerm  : Integer;
+                    ToBroadcastLogEntries   : LogEntryVector.Vector;
+                    ToBroadcastCommitIndex  : Integer := Self.all.CommitIndex;
+
+                    ExpectedNextIndex : Integer := Self.all.NextIndex (Id);
+                begin
+                    if Self.all.Log.Is_Empty then
+                        ToBroadcastPrevLogIndex := 0;
+                        ToBroadcastPrevLogTerm  := Self.all.CurrentTerm;
+                    else
+                        ToBroadcastPrevLogIndex :=
+                           Self.all.Log (Self.all.Log.Last_Index).Index;
+                        ToBroadcastPrevLogTerm  :=
+                           Self.all.Log (Self.all.Log.Last_Index).Term;
+                    end if;
+
+                    Logger.Log
+                       (LogFileName,
+                        "AppendEntry from " & Integer'Image (Msg.LeaderId) &
+                        " due to earthquake sensed");
+
+                    --Append Message LogEntries in the log, update index and then broadcast with AppendEntry
+                    for E of MessageLogEntries loop
+                        declare
+                            Term  : Integer         := Self.all.CurrentTerm;
+                            Index : Integer;
+                            Load  : Payload.Payload := E.Peyload;
+
+                            EEEE : LogEntry.LogEntry;
+                        begin
+                            if Self.all.Log.Is_Empty then
+                                Index := 1;
+                            else
+                                Index := Self.all.Log.Last_Index + 1;
+                            end if;
+
+                            EEEE := LogEntry.LogEntry'(Term, Index, Load);
+
+                            Self.all.Log.Append (EEEE);
+
+                            --  Update NextIndex(Id)
+                            Self.all.NextIndex (Id) :=
+                               Self.all.NextIndex (Id) + 1;
+
+                            ToBroadcastLogEntries.Append (EEEE);
+                        end;
+                    end loop;
+
+                    --  Broadcast AppendEntry
+                    ToBroadcast :=
+                       Message.AppendEntry'
+                          (ToBroadcastTerm,--
+                           ToBroadcastId, --
+                           ToBroadcastPrevLogIndex, --
+                           ToBroadcastPrevLogTerm, --
+                           ToBroadcastLogEntries, --
+                           ToBroadcastCommitIndex);
+                    Broadcast (Id, Net, ToBroadcast);
+                end;
 
             end if;
         end LeaderBehaviour;
@@ -775,7 +868,6 @@ package body Node is
                     MessageSuccess : Boolean := Msg.Success;
                     MessageTerm    : Integer := Msg.Term;
 
-
                 begin
 
                     if not MessageSuccess then
@@ -820,7 +912,7 @@ package body Node is
 
                         Self.all.NextIndex (MessageSender) :=
                            Self.all.NextIndex (MessageSender) + 1;
-            
+
                         Logger.Log
                            (LogFileName,
                             "Node " & Integer'Image (MessageSender) &
@@ -1017,8 +1109,8 @@ package body Node is
             begin
                 if CommitIndex > LastApplied then
                     Self.all.LastApplied := CommitIndex;
-                    --  Apply(Self.all.Log(LastApplied));
-                    Self.DB.Append(Self.Log(Self.Log.Last_Index).Peyload);
+                    --  TODO : If CommitIndex is LastApplied + c we need to insert the last c element in DB
+                    Self.DB.Append (Self.Log (Self.Log.Last_Index).Peyload);
                 end if;
             end;
         end AllServerRule;

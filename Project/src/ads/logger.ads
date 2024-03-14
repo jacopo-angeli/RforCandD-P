@@ -5,6 +5,6 @@ package Logger is
 
    procedure Log (File_Name: String; Content: String);
 
-   procedure PrettyPrint(File_Name: String; Content:  Payload.PayloadVector.Vector);
+   procedure DB(File_Name: String; Content:  Payload.PayloadVector.Vector);
 
 end Logger;
