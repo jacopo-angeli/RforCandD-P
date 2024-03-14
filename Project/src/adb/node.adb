@@ -63,9 +63,6 @@ package body Node is
                     N2 := ProbC (Float (To_Duration (TimeSpanFromLastCrash)));
                     if(N1>N2) then 
                         Paused.all:=true;
-                        if (Paused.all) then
-                            Put_Line (Boolean'Image (Paused.all));
-                        end if;
                         if Paused.all then
                             Logger.Log (LogFileName, "Node crashed.");
                             while Paused.all loop

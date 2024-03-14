@@ -20,11 +20,11 @@ package body Payload is
         Ada.Numerics.Float_Random.Reset (FloatGen);
         Integer_Random.Reset (IntegerGen);
 
-        Frequency := Ada.Numerics.Float_Random.Random (FloatGen);
-        Amplitude := Ada.Numerics.Float_Random.Random (FloatGen);
-        Duration  := Integer_Random.Random (IntegerGen);
-        Magnitudo := Integer_Random.Random (IntegerGen);
-        Depth     := Ada.Numerics.Float_Random.Random (FloatGen);
+        Frequency := ABS(Ada.Numerics.Float_Random.Random (FloatGen));
+        Amplitude := ABS(Ada.Numerics.Float_Random.Random (FloatGen));
+        Duration  := ABS(Integer_Random.Random (IntegerGen));
+        Magnitudo := ABS(Integer_Random.Random (IntegerGen) mod 8 + 1);
+        Depth     := ABS(Ada.Numerics.Float_Random.Random (FloatGen));
 
         return Payload'
               (Frequency,--
