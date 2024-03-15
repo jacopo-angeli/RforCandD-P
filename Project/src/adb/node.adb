@@ -63,14 +63,11 @@ package body Node is
                     N1 := Ada.Numerics.Float_Random.Random (Gen);
                     N2 := ProbC (Float (To_Duration (TimeSpanFromLastCrash)));
                     if (N1 > N2) then
-                        Paused.all := False;
-                        if (Paused.all) then
-                        null;
-                        end if;
+                        Paused.all := True;
                         if Paused.all then
                             Logger.Log (LogFileName, "Node crashed.");
                             while Paused.all loop
-                                delay 5.0;
+                                delay NodeART;
                                 Paused.all := False;
                                 --  Clear of all the received message while in crash state
                                 Queue.Clear (Net.all (Id).all);
@@ -573,8 +570,7 @@ package body Node is
 
             if Msg.LogEntries.Is_Empty then
 
-                Self.all.CommitIndex :=
-                   Integer'Max (Msg.LeaderCommit, Self.all.CommitIndex);
+                null;
 
             else
                 Logger.Log (LogFileName, "Received Append Entry");
@@ -584,6 +580,12 @@ package body Node is
                     Element : LogEntry.LogEntry;
 
                 begin
+
+                --  TODO : MessagePrevLogIndex può essere maggiore della lunghezza del log
+                --  TODO : Se il log è vuoto, l'eccezzione così com'è fatta ora gestisce correttamente
+                --  TODO : Se il log non è vuoto, significa che mi mancano delle entries quindi rispondo false
+                --  TODO : In teoria poi il Leader dovrebbe continuare a mandarmi le log entries dalla penultima in giù 
+                --  TODO : Fino a quando non raggiungo una entry corretta
 
                     Element := Self.all.Log (MessagePrevLogIndex - 1);
 
@@ -607,16 +609,6 @@ package body Node is
 
                     --  5. If leaderCommit > commitIndex, set commitIndex =
                     --     min(leaderCommit, index of last new entry)
-                    Logger.Log
-                       (LogFileName,
-                        "Leader commit index:" &
-                        Integer'Image (MessageLeaderCommitIndex));
-                    Logger.Log
-                       (LogFileName,
-                        "Leader commit index:" &
-                        Integer'Image
-                           (MessageLogEntries (MessageLogEntries.Last_Index)
-                               .Index));
                     Self.all.CommitIndex :=
                        Integer'Min
                           (MessageLeaderCommitIndex,
@@ -637,7 +629,8 @@ package body Node is
 
                     --  No element in Log at index MessagePrevLogIndex
                     when others =>
-                        Logger.Log (LogFileName, "Empty Log");
+
+                        Logger.Log (LogFileName, "Empty log");
 
                         --  If MessagePrevLogIndex = 0 append the message else return false
                         --  else respond false
@@ -648,11 +641,6 @@ package body Node is
                                 Logger.Log (LogFileName, "Entry appended");
                             end loop;
 
-                            Self.all.CommitIndex :=
-                               Integer'Min
-                                  (MessageLeaderCommitIndex,
-                                   Self.all.Log.Last_Index);
-
                             Respond
                                (Net, --
                                 Message.AppendEntryResponse'
@@ -662,23 +650,22 @@ package body Node is
                                 MessageLeaderId);
                             Logger.Log (LogFileName, "Append successful");
 
-                            Logger.Log
-                               (LogFileName,
-                                "Leader commit index:" &
-                                Integer'Image (MessageLeaderCommitIndex));
-                            Logger.Log
-                               (LogFileName,
-                                "Leader commit index:" &
-                                Integer'Image
-                                   (MessageLogEntries
-                                       (MessageLogEntries.Last_Index)
-                                       .Index));
-                            Self.all.CommitIndex :=
-                               Integer'Min
-                                  (MessageLeaderCommitIndex,
-                                   MessageLogEntries
-                                      (MessageLogEntries.Last_Index)
-                                      .Index);
+                            declare
+                                lastIndex : Integer := Self.all.CommitIndex;
+                            begin
+                                Self.all.CommitIndex :=
+                                   Integer'Min
+                                      (MessageLeaderCommitIndex,
+                                       MessageLogEntries
+                                          (MessageLogEntries.Last_Index)
+                                          .Index);
+                                if Self.all.CommitIndex /= lastIndex then
+                                    Logger.Log
+                                       (LogFileName,
+                                        "New Commit Index :" &
+                                        Integer'Image (Self.all.CommitIndex));
+                                end if;
+                            end;
 
                         else
 
@@ -908,7 +895,6 @@ package body Node is
 
                     else
                         --  Entry successful
-                        --  AppendCounter ++
 
                         Self.all.NextIndex (MessageSender) :=
                            Self.all.NextIndex (MessageSender) + 1;
@@ -1108,9 +1094,17 @@ package body Node is
                 LastApplied : Integer := Self.all.LastApplied;
             begin
                 if CommitIndex > LastApplied then
+                    Logger.Log
+                       (LogFileName,
+                        "Commit index greater than LastApplied of : " &
+                        Integer'Image (CommitIndex - LastApplied));
+
+                    for i in LastApplied .. (CommitIndex - 1) loop
+                        Logger.Log(LogFileName, "Applied : " &
+                                Payload_Stringify (Self.all.Log (i).Peyload));
+                            Self.DB.Append (Self.all.Log (i).Peyload);
+                    end loop;
                     Self.all.LastApplied := CommitIndex;
-                    --  TODO : If CommitIndex is LastApplied + c we need to insert the last c element in DB
-                    Self.DB.Append (Self.Log (Self.Log.Last_Index).Peyload);
                 end if;
             end;
         end AllServerRule;
@@ -1129,7 +1123,10 @@ package body Node is
             begin
                 Self.all.CommitIndex := Integer'Max (N, Self.all.CommitIndex);
                 if lastV /= Self.all.CommitIndex then
-                    Logger.Log (LogFileName, "New commit index.");
+                    Logger.Log
+                       (LogFileName,
+                        "New commit index : " &
+                        Integer'Image (Self.all.CommitIndex));
                 end if;
             end;
 
