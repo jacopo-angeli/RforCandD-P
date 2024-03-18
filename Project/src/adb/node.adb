@@ -570,7 +570,28 @@ package body Node is
 
             if Msg.LogEntries.Is_Empty then
 
-                null;
+                declare
+                    lastIndex : Integer := Self.all.CommitIndex;
+                begin
+                    if Self.all.Log.Is_Empty then
+                        null;
+                    else
+                        if MessageLeaderCommitIndex > Self.all.CommitIndex then
+                            Self.all.CommitIndex :=
+                               Integer'Min
+                                  (MessageLeaderCommitIndex,
+                                   Self.all.Log (Self.all.Log.Last_Index)
+                                      .Index);
+                            if Self.all.CommitIndex /= lastIndex then
+                                Logger.Log
+                                   (LogFileName,
+                                    "New Commit Index :" &
+                                    Integer'Image (Self.all.CommitIndex));
+                            end if;
+                        end if;
+                    end if;
+
+                end;
 
             else
                 Logger.Log (LogFileName, "Received Append Entry");
@@ -580,12 +601,6 @@ package body Node is
                     Element : LogEntry.LogEntry;
 
                 begin
-
-                --  TODO : MessagePrevLogIndex può essere maggiore della lunghezza del log
-                --  TODO : Se il log è vuoto, l'eccezzione così com'è fatta ora gestisce correttamente
-                --  TODO : Se il log non è vuoto, significa che mi mancano delle entries quindi rispondo false
-                --  TODO : In teoria poi il Leader dovrebbe continuare a mandarmi le log entries dalla penultima in giù 
-                --  TODO : Fino a quando non raggiungo una entry corretta
 
                     Element := Self.all.Log (MessagePrevLogIndex - 1);
 
@@ -629,46 +644,15 @@ package body Node is
 
                     --  No element in Log at index MessagePrevLogIndex
                     when others =>
+                        --  TODO : MessagePrevLogIndex può essere maggiore della lunghezza del log
+                        --  TODO : Se il log è vuoto, l'eccezzione così com'è fatta ora gestisce correttamente
+                        --  TODO : Se il log non è vuoto, significa che mi mancano delle entries quindi rispondo false
+                        --  TODO : In teoria poi il Leader dovrebbe continuare a mandarmi le log entries dalla penultima in giù
+                        --  TODO : Fino a quando non raggiungo una entry corretta
 
-                        Logger.Log (LogFileName, "Empty log");
+                        if not Self.all.Log.Is_Empty then
 
-                        --  If MessagePrevLogIndex = 0 append the message else return false
-                        --  else respond false
-                        if MessagePrevLogIndex = 0 then
-
-                            for E of MessageLogEntries loop
-                                Self.all.Log.Append (E);
-                                Logger.Log (LogFileName, "Entry appended");
-                            end loop;
-
-                            Respond
-                               (Net, --
-                                Message.AppendEntryResponse'
-                                   (Self.all.CurrentTerm,--
-                                    Id,--
-                                    True),--
-                                MessageLeaderId);
-                            Logger.Log (LogFileName, "Append successful");
-
-                            declare
-                                lastIndex : Integer := Self.all.CommitIndex;
-                            begin
-                                Self.all.CommitIndex :=
-                                   Integer'Min
-                                      (MessageLeaderCommitIndex,
-                                       MessageLogEntries
-                                          (MessageLogEntries.Last_Index)
-                                          .Index);
-                                if Self.all.CommitIndex /= lastIndex then
-                                    Logger.Log
-                                       (LogFileName,
-                                        "New Commit Index :" &
-                                        Integer'Image (Self.all.CommitIndex));
-                                end if;
-                            end;
-
-                        else
-
+                            --  Missing some entries
                             Respond
                                (Net, --
                                 Message.AppendEntryResponse'
@@ -676,8 +660,61 @@ package body Node is
                                     Id,--
                                     False),--
                                 MessageLeaderId);
-                            Logger.Log (LogFileName, "Append fail");
+                            Logger.Log (LogFileName, "Log not synched.");
 
+                        else
+
+                            Logger.Log (LogFileName, "Empty log");
+
+                            --  If MessagePrevLogIndex = 0 append the message else return false
+                            --  else respond false
+                            if MessagePrevLogIndex = 0 then
+
+                                for E of MessageLogEntries loop
+                                    Self.all.Log.Append (E);
+                                    Logger.Log (LogFileName, "Entry appended");
+                                end loop;
+
+                                Respond
+                                   (Net, --
+                                    Message.AppendEntryResponse'
+                                       (Self.all.CurrentTerm,--
+                                        Id,--
+                                        True),--
+                                    MessageLeaderId);
+                                Logger.Log (LogFileName, "Append successful");
+
+                                declare
+                                    lastIndex : Integer :=
+                                       Self.all.CommitIndex;
+                                begin
+                                    Self.all.CommitIndex :=
+                                       Integer'Min
+                                          (MessageLeaderCommitIndex,
+                                           MessageLogEntries
+                                              (MessageLogEntries.Last_Index)
+                                              .Index);
+                                    if Self.all.CommitIndex /= lastIndex then
+                                        Logger.Log
+                                           (LogFileName,
+                                            "New Commit Index :" &
+                                            Integer'Image
+                                               (Self.all.CommitIndex));
+                                    end if;
+                                end;
+
+                            else
+
+                                Respond
+                                   (Net, --
+                                    Message.AppendEntryResponse'
+                                       (Self.all.CurrentTerm,--
+                                        Id,--
+                                        False),--
+                                    MessageLeaderId);
+                                Logger.Log (LogFileName, "Append fail");
+
+                            end if;
                         end if;
 
                 end;
@@ -851,6 +888,7 @@ package body Node is
                 null;
             when LEADER =>
                 declare
+
                     MessageSender  : Integer := Msg.Sender;
                     MessageSuccess : Boolean := Msg.Success;
                     MessageTerm    : Integer := Msg.Term;
@@ -863,6 +901,14 @@ package body Node is
                         --  nextIndex and retries the AppendEntries RPC.
                         Self.all.NextIndex (MessageSender) :=
                            Self.all.NextIndex (MessageSender) - 1;
+
+                        Logger.Log
+                           (LogFileName,
+                            "Node " & Integer'Image (MessageSender) &
+                            " appended successfully. NextIndex(" &
+                            Integer'Image (MessageSender) & " ) = " &
+                            Integer'Image
+                               (Self.all.NextIndex (MessageSender)));
 
                         declare
                             Term         : Integer := Self.all.CurrentTerm;
@@ -1100,9 +1146,11 @@ package body Node is
                         Integer'Image (CommitIndex - LastApplied));
 
                     for i in LastApplied .. (CommitIndex - 1) loop
-                        Logger.Log(LogFileName, "Applied : " &
-                                Payload_Stringify (Self.all.Log (i).Peyload));
-                            Self.DB.Append (Self.all.Log (i).Peyload);
+                        Logger.Log
+                           (LogFileName,
+                            "Applied : " &
+                            Payload_Stringify (Self.all.Log (i).Peyload));
+                        Self.DB.Append (Self.all.Log (i).Peyload);
                     end loop;
                     Self.all.LastApplied := CommitIndex;
                 end if;
