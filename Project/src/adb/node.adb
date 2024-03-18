@@ -545,6 +545,8 @@ package body Node is
             MessageLeaderId          : Integer := Msg.LeaderId;
         begin
 
+            --  If RPC request or response contains term T > currentTerm:
+            --  set currentTerm = T, convert to follower
             if MessageTerm > Self.all.CurrentTerm then
                 Self.all.CurrentTerm := MessageTerm;
                 Self.all.VotedFor    := -1;
@@ -568,34 +570,32 @@ package body Node is
                 Self.all.CurrentLeader       := Msg.LeaderId;
             end if;
 
-            if Msg.LogEntries.Is_Empty then
-
-                declare
-                    lastIndex : Integer := Self.all.CommitIndex;
-                begin
-                    if Self.all.Log.Is_Empty then
-                        null;
-                    else
-                        if MessageLeaderCommitIndex > Self.all.CommitIndex then
-                            Self.all.CommitIndex :=
-                               Integer'Min
-                                  (MessageLeaderCommitIndex,
-                                   Self.all.Log (Self.all.Log.Last_Index)
-                                      .Index);
-                            if Self.all.CommitIndex /= lastIndex then
-                                Logger.Log
-                                   (LogFileName,
-                                    "New Commit Index :" &
-                                    Integer'Image (Self.all.CommitIndex));
-                            end if;
+            --  5. If leaderCommit > commitIndex, set commitIndex =
+            --     min(leaderCommit, index of last new entry)
+            declare
+                lastIndex : Integer := Self.all.CommitIndex;
+            begin
+                if Self.all.Log.Is_Empty then
+                    null;
+                else
+                    if MessageLeaderCommitIndex > Self.all.CommitIndex then
+                        Self.all.CommitIndex :=
+                           Integer'Min
+                              (MessageLeaderCommitIndex,
+                               Self.all.Log (Self.all.Log.Last_Index).Index);
+                        if Self.all.CommitIndex /= lastIndex then
+                            Logger.Log
+                               (LogFileName,
+                                "New Commit Index :" &
+                                Integer'Image (Self.all.CommitIndex));
                         end if;
                     end if;
+                end if;
+            end;
 
-                end;
+            if not Msg.LogEntries.Is_Empty then
 
-            else
                 Logger.Log (LogFileName, "Received Append Entry");
-
                 declare
 
                     Element : LogEntry.LogEntry;
@@ -622,14 +622,6 @@ package body Node is
                         Logger.Log (LogFileName, "Entry appended");
                     end loop;
 
-                    --  5. If leaderCommit > commitIndex, set commitIndex =
-                    --     min(leaderCommit, index of last new entry)
-                    Self.all.CommitIndex :=
-                       Integer'Min
-                          (MessageLeaderCommitIndex,
-                           MessageLogEntries (MessageLogEntries.Last_Index)
-                              .Index);
-
                     Logger.Log (LogFileName, "Append successful");
 
                     Respond
@@ -650,26 +642,9 @@ package body Node is
                         --  TODO : In teoria poi il Leader dovrebbe continuare a mandarmi le log entries dalla penultima in giù
                         --  TODO : Fino a quando non raggiungo una entry corretta
 
-                        if not Self.all.Log.Is_Empty then
-
-                            --  Missing some entries
-                            Respond
-                               (Net, --
-                                Message.AppendEntryResponse'
-                                   (Self.all.CurrentTerm,--
-                                    Id,--
-                                    False),--
-                                MessageLeaderId);
-                            Logger.Log (LogFileName, "Log not synched.");
-
-                        else
-
-                            Logger.Log (LogFileName, "Empty log");
-
-                            --  If MessagePrevLogIndex = 0 append the message else return false
-                            --  else respond false
+                        if Self.all.Log.Is_Empty then
                             if MessagePrevLogIndex = 0 then
-
+                                --  Ok: Append the entries
                                 for E of MessageLogEntries loop
                                     Self.all.Log.Append (E);
                                     Logger.Log (LogFileName, "Entry appended");
@@ -683,28 +658,14 @@ package body Node is
                                         True),--
                                     MessageLeaderId);
                                 Logger.Log (LogFileName, "Append successful");
-
-                                declare
-                                    lastIndex : Integer :=
-                                       Self.all.CommitIndex;
-                                begin
-                                    Self.all.CommitIndex :=
-                                       Integer'Min
-                                          (MessageLeaderCommitIndex,
-                                           MessageLogEntries
-                                              (MessageLogEntries.Last_Index)
-                                              .Index);
-                                    if Self.all.CommitIndex /= lastIndex then
-                                        Logger.Log
-                                           (LogFileName,
-                                            "New Commit Index :" &
-                                            Integer'Image
-                                               (Self.all.CommitIndex));
-                                    end if;
-                                end;
-
                             else
-
+                                --  2. Reply false if log doesn’t contain an entry at prevLogIndex
+                                --  whose term matches prevLogTerm (§5.3)
+                                Logger.Log
+                                   (LogFileName,
+                                    "Element at PrevLogIndex:" &
+                                    Integer'Image (MessagePrevLogIndex) &
+                                    " not found.");
                                 Respond
                                    (Net, --
                                     Message.AppendEntryResponse'
@@ -712,13 +673,10 @@ package body Node is
                                         Id,--
                                         False),--
                                     MessageLeaderId);
-                                Logger.Log (LogFileName, "Append fail");
-
+                                Logger.Log (LogFileName, "Log not synched.");
                             end if;
                         end if;
-
                 end;
-
             end if;
 
         end FollowerBehaviour;
@@ -1089,7 +1047,7 @@ package body Node is
 
                     --  When a leader first comes to power,
                     --  it initializes all nextIndex values to the index just after the
-                    --  last one in its log (11 in Figure 7
+                    --  last one in its log
                     Self.all.NextIndex.Clear;
                     Self.all.NextIndex.Append
                        (Integer (Self.all.Log.Last_Index) + 1, Net.Length);
@@ -1162,9 +1120,6 @@ package body Node is
             --  If there exists an N such that N > commitIndex, a majority
             --  of matchIndex[i] ≥ N, and log[N].term == currentTerm:
             --  set commitIndex = N (§5.3, §5.4).
-
-            --  Find the min of MatchIndex
-            --  If it's > commitIndex them update CommitIndex
             declare
                 N     : Integer := IntegerVectorInfimum (Self.all.NextIndex);
                 lastV : Integer := Self.all.CommitIndex;
