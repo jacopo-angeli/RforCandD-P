@@ -47,7 +47,7 @@ package body Node is
             end if;
         end Logging;
 
-        procedure CrashSimulator is
+        procedure CrashSimulation is
         begin
             declare
 
@@ -92,7 +92,7 @@ package body Node is
                     TimeSpanFromLastCrashGeneration := Clock;
                 end if;
             end;
-        end CrashSimulator;
+        end CrashSimulation;
 
         procedure QuakeSimulation is
         begin
@@ -179,7 +179,7 @@ package body Node is
             Logging;
 
             --  Crash simulation
-            --  CrashSimulator;
+            CrashSimulation;
 
             --  Sensed Quake
             QuakeSimulation;
@@ -532,7 +532,8 @@ package body Node is
                                     Message.AppendEntryResponse'
                                        (Self.all.CurrentTerm,--
                                         Id,--
-                                        False, 0),--
+                                        False, --
+                                        Self.all.Log.Last_Index),--
                                     MessageLeaderId);
                                 Logger.Log (LogFileName, "Log not synched.");
                             end if;
@@ -549,7 +550,8 @@ package body Node is
                                 Message.AppendEntryResponse'
                                    (Self.all.CurrentTerm,--
                                     Id,--
-                                    False, 0),--
+                                    False,--
+                                    Self.all.Log.Last_Index),--
                                 MessageLeaderId);
                             Logger.Log (LogFileName, "Log not synched.");
                         end if;
@@ -660,6 +662,7 @@ package body Node is
                                 " , Term:" & Integer'Image (EEEE.Term) & ", " &
                                 Payload_Stringify (EEEE.Peyload) & "}");
                             Self.all.MatchIndex (Id) := Index;
+                            Self.all.NextIndex (Id)  := Index + 1;
                             Self.all.Log.Append (EEEE);
 
                             --  Update NextIndex(Id)
@@ -758,10 +761,10 @@ package body Node is
                         declare
                             Term         : Integer := Self.all.CurrentTerm;
                             LeaderId     : Integer := Id;
-                            PrevLogIndex : Integer :=
-                               Self.all.NextIndex (MessageSender) - 1;
+                            PrevLogIndex : Integer := MessageIndex;
                             PrevLogTerm  : Integer :=
-                               Self.all.Log (PrevLogIndex).Term;
+                               Self.all.Log (MessageIndex).Term;
+
                             LogEntries   : LogEntryVector.Vector;
                             LeaderCommit : Integer := Self.all.CommitIndex;
                         begin
@@ -769,9 +772,14 @@ package body Node is
                             LogEntries :=
                                LogEntry.VectorSlice
                                   (Self.all.Log,--
-                                   PrevLogIndex + 1,--
+                                   PrevLogIndex,--
                                    Self.all.Log.Last_Index);
 
+                            Logger.Log
+                               (LogFileName,
+                                "Resending entries from " &
+                                Integer'Image (PrevLogIndex) & " to" &
+                                Integer'Image (Self.all.Log.Last_Index));
                             Respond
                                (Net,
                                 Message.AppendEntry'
@@ -787,8 +795,7 @@ package body Node is
                     else
                         --  Entry successful
 
-                        Self.all.NextIndex (MessageSender) :=
-                           Self.all.NextIndex (MessageSender) + 1;
+                        Self.all.NextIndex (MessageSender) := MessageIndex + 1;
 
                         Self.all.MatchIndex (MessageSender) := MessageIndex;
 

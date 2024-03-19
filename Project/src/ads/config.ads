@@ -5,7 +5,7 @@ package Config is
     --  Node Failure Rate per 10 seconds
     NodeFR  : Float     := 1.0;
     --  Average Node resume times
-    NodeART : Time_Span := Seconds (0);
+    NodeART : Time_Span := Seconds (1);
     --  Network Failure Rate
     NetFR   : Float     := 0.0;
 
