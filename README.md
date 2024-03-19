@@ -3,11 +3,11 @@
 > Maximizing data availability and consistency, in a fault-prone network
 
 ## Authors
+Angeli Jacopo, Alberto Angeloni
 
- Angeli Jacopo, Alberto Angeloni
-Department of Mathematics
-University of Padua, Italy
-e-mail: {jacopo.angeli, alberto.angeloni}@studenti.unipd.com
+Department of Mathematics, University of Padua, Italy
+
+contacts: {jacopo.angeli, alberto.angeloni}@studenti.unipd.com
 
 ## Asbstract
 
