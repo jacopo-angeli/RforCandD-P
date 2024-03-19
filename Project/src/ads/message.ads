@@ -28,6 +28,8 @@ package Message is
         Sender  : Integer;
         --  True if follower contained entry matching prevLogIndex and prevLogTerm
         Success : Boolean;
+        --  Index of last appended entry
+        Index : Integer;
     end record;
     function Message_Stringify (Msg : in AppendEntryResponse) return String;
 

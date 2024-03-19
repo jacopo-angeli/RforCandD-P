@@ -81,9 +81,10 @@ package Node is
     HeartbeatTimeoutDuration : aliased Time_Span;
     CandidationTimestamp     : aliased Time;
     ElectionTimeoutDuration  : aliased Time_Span;
-    
-    LastMoonquakeTimestamp    : aliased Time;
-    LastCrashTimestamp   : aliased Time;
+
+    LastMoonquakeTimestamp : aliased Time;
+    LastCrashTimestamp     : aliased Time;
+    LastLogTimestamp       : aliased Time;
 
     CurrentLeader : aliased Integer;
     VotesCounter  : aliased Integer;
@@ -101,10 +102,7 @@ package Node is
   task type Node
    (Id     : Integer; --
     Net    : access QueueVector.Vector; --
-    Paused : access Boolean) is
-    entry Request
-     (Msg : in Message.ClientRequest; Response : out Message.ClientResponse);
-  end Node;
+    Paused : access Boolean);
 
   type NodeAccess is access all Node;
 
@@ -139,11 +137,6 @@ private
     Net  : access QueueVector.Vector;--
     Self : access NodeState; --
     Msg  : Message.RequestVoteResponse);
-  function HandleClientRequest
-   (Id   : Integer; --
-    Net  : access QueueVector.Vector;--
-    Self : access NodeState; --
-    Msg  : Message.ClientRequest) return Message.ClientResponse;
 
   --  Broadcast procedure
   procedure Broadcast

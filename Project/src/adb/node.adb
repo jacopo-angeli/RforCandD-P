@@ -25,7 +25,7 @@ package body Node is
     use Ada.Numerics.Elementary_Functions;
 
     task body Node is
-        NodesNumber : Integer           := Integer (Net.all.Length / 2);
+        NodesNumber : Integer           := Integer (Net.all.Length);
         Self        : aliased NodeState := NodeStateInit (NodesNumber);
 
         TimeSpanFromLastQuakeGeneration : Time := Clock;
@@ -36,6 +36,16 @@ package body Node is
            "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
         LogFileName      : constant String :=
            "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
+
+        procedure Logging is
+            TimeSpanFromLastLog : Time_Span := Clock - Self.LastLogTimestamp;
+        begin
+            if TimeSpanFromLastLog > Seconds (1) then
+                Logger.Log ("State_" & LogFileName, StateToString (Self));
+                Logger.DB ("DB_" & LogFileName, Self.DB);
+                Self.LastLogTimestamp := Clock;
+            end if;
+        end Logging;
 
         procedure CrashSimulator is
         begin
@@ -58,25 +68,25 @@ package body Node is
                 Ada.Numerics.Float_Random.Reset (Gen);
                 if (Clock - TimeSpanFromLastCrashGeneration) > Seconds (1) then
 
-                    Logger.DB ("DB_" & LogFileName, Self.DB);
-
                     N1 := Ada.Numerics.Float_Random.Random (Gen);
                     N2 := ProbC (Float (To_Duration (TimeSpanFromLastCrash)));
                     if (N1 > N2) then
-                        Paused.all := True;
-                        if Paused.all then
-                            Logger.Log (LogFileName, "Node crashed.");
-                            while Paused.all loop
-                                delay NodeART;
+                        Paused.all              := True;
+                        Self.LastCrashTimestamp := Clock;
+                        Logger.Log (LogFileName, "Node crashed.");
+
+                        while Paused.all loop
+                            if (Clock - Self.LastCrashTimestamp) > NodeART then
                                 Paused.all := False;
-                                --  Clear of all the received message while in crash state
-                                Queue.Clear (Net.all (Id).all);
-                                --  Current type to FOLLOWER
-                                Self.CurrentType         := FOLLOWER;
-                                Self.LastPacketTimestamp := Clock;
-                                Logger.Log (LogFileName, "Node up.");
-                            end loop;
-                        end if;
+                            end if;
+                        end loop;
+
+                        --  Clear of all the received message while in crash state
+                        Queue.Clear (Net.all (Id).all);
+                        --  Current type to FOLLOWER
+                        Self.CurrentType         := FOLLOWER;
+                        Self.LastPacketTimestamp := Clock;
+                        Logger.Log (LogFileName, "Node up.");
                         Self.LastCrashTimestamp := Clock;
                     end if;
                     TimeSpanFromLastCrashGeneration := Clock;
@@ -116,8 +126,6 @@ package body Node is
                 Ada.Numerics.Float_Random.Reset (Gen);
 
                 if (Clock - TimeSpanFromLastQuakeGeneration) > Seconds (1) then
-
-                    Logger.Log ("State_" & LogFileName, StateToString (Self));
 
                     N1 := Ada.Numerics.Float_Random.Random (Gen);
                     N2 := ProbE (Float (To_Duration (TimeSpanFromLastQuake)));
@@ -167,40 +175,29 @@ package body Node is
         Logger.Log (LogFileName, "Node started.");
 
         loop
-            select
-                accept Request
-                   (Msg      : in     Message.ClientRequest;
-                    Response :    out Message.ClientResponse)
-                do
-                    Logger.Log (LogFileName, "Client request received.");
-                    Response :=
-                       HandleClientRequest (Id, Net, Self'Access, Msg);
-                end Request;
-            or
-                delay 0.0;
+            --
+            Logging;
 
-                --  Crash simulation
-                CrashSimulator;
+            --  Crash simulation
+            --  CrashSimulator;
 
-                --  Sensed Quake
-                QuakeSimulation;
+            --  Sensed Quake
+            QuakeSimulation;
 
-                --  Message handle
-                while not Queue.Is_Empty (Net.all (id).all) loop
-                    HandleMessage
-                       (Id,--
-                        Net,--
-                        Self'Access,--
-                        Queue.Dequeue (Net.all (Id).all));
-
-                    --  TimeoutMangment
-                    TimeoutManagment (Id, Net, Self'Access);
-                end loop;
+            --  Message handle
+            while not Queue.Is_Empty (Net.all (id).all) loop
+                HandleMessage
+                   (Id,--
+                    Net,--
+                    Self'Access,--
+                    Queue.Dequeue (Net.all (Id).all));
 
                 --  TimeoutMangment
                 TimeoutManagment (Id, Net, Self'Access);
+            end loop;
 
-            end select;
+            --  TimeoutMangment
+            TimeoutManagment (Id, Net, Self'Access);
         end loop;
     end Node;
 
@@ -243,6 +240,7 @@ package body Node is
                ElectionTimeoutDuration  => T1,--
                LastMoonquakeTimestamp   => Clock,--
                LastCrashTimestamp       => Clock, --
+               LastLogTimestamp         => Clock,--
                CandidationTimestamp     => Clock, --
                CurrentLeader            => -1,--
                VotesCounter             => 0,--
@@ -292,142 +290,6 @@ package body Node is
         return C;
 
     end EqualityCount;
-
-    function HandleClientRequest
-       (Id   : Integer; --
-        Net  : access QueueVector.Vector;--
-        Self : access NodeState; --
-        Msg  : Message.ClientRequest) return Message.ClientResponse
-    is
-        LogFileName : constant String :=
-           "Node_" & Trim (Integer'Image (Id), Ada.Strings.Left);
-
-        function LeaderBehaviour return Message.ClientResponse is
-
-            CurrentTerm  : Integer := Self.all.CurrentTerm;
-            PrevLogIndex : Integer;
-            PrevLogTerm  : Integer;
-            LogEntries   : LogEntryVector.Vector;
-            LeaderCommit : Integer := Self.all.CommitIndex;
-
-            NewEntry : LogEntry.LogEntry :=
-               LogEntry.LogEntry'
-                  (CurrentTerm, Self.all.NextIndex (Id), Msg.Peyload);
-
-            ToBroadcast : Message.AppendEntry;
-
-        begin
-            if Self.all.Log.Is_Empty then
-                PrevLogIndex := 0;
-                PrevLogTerm  := CurrentTerm;
-            else
-                PrevLogIndex := Self.all.Log (Self.all.Log.Last_Index).Index;
-                PrevLogTerm  := Self.all.Log (Self.all.Log.Last_Index).Term;
-            end if;
-
-            LogEntries.Append (NewEntry);
-            ToBroadcast :=
-               Message.AppendEntry'
-                  (CurrentTerm,--
-                   Id,--
-                   PrevLogIndex,--
-                   PrevLogTerm,--
-                   LogEntries,--
-                   LeaderCommit);
-
-            --  Appends the command to its log as a new entry, then is-
-            --  sues AppendEntries RPCs in parallel to each of the other
-            --  servers to replicate the entry. When the entry has been
-            --  safely replicated (as described below), the leader applies
-            --  the entry to its state machine and returns the result of that
-            --  execution to the client
-
-            --  Append Entry in leader log
-            Self.all.Log.Append (NewEntry);
-            --  Update NextIndex(Id)
-            Self.all.NextIndex (Id) := Self.all.NextIndex (Id) + 1;
-            --  Restore of AppendedCounter in order to detect when to respond to the client
-            --  Self.all.AppendedCounter := 0;
-            --  Broadcast AppendEntry
-            Broadcast (Id, Net, ToBroadcast);
-
-            declare
-
-                ExpectedNextIndex : Integer := Self.all.NextIndex (Id);
-                NetLenght         : Integer := Integer (Net.all.Length / 2);
-
-            begin
-                --  Repeat till at least N nodes has NextIndex synced, whit N=Net.Lenght\2
-                while not
-                   (EqualityCount (Self.all.NextIndex, ExpectedNextIndex) >
-                    Integer (NetLenght / 2))
-                loop
-                    --------------------------------------------------------------
-                    -- The point is that after a broadcast of the appendEntry   --
-                    -- we have three possibility:                               --
-                    --  - Follower respond true: Then NextIndex(FollowerId)     --
-                    --    will be equal to NextIdex(Leader);                    --
-                    --  - Follower respond false: Then leader keep send Entries --
-                    --    till NextIndex(Follower) will be equal to             --
-                    --    NextIndex(Leader);                                    --
-                    --  - Follower doesent respond: Then leader keep sending    --
-                    --    appendEntry request because it can respond to the     --
-                    --    client only if the majority of the cluster appended   --
-                    --    the entry;                                            --
-                    --  - Leader crash: It will not respond to the client and   --
-                    --    eventually all the follower that appended the entry   --
-                    --    will delete it.                                       --
-                    --------------------------------------------------------------
-                    while not Queue.Is_Empty (Net.all (id).all) loop
-
-                        HandleMessage
-                           (Id,--
-                            Net,--
-                            Self,--
-                            Queue.Dequeue (Net.all (Id).all));
-
-                    end loop;
-                end loop;
-                return
-                   Message.ClientResponse'
-                      (True, To_Unbounded_String ("Everything fine."));
-            end;
-        end LeaderBehaviour;
-
-        function FollowerBehaviour return Message.ClientResponse is
-        begin
-            --  Redirect the client call to Leader
-            --  The client doesn't know that it's communicating with a follower
-            --  Use respond function to send the client request to the leader
-            Respond
-               (Net => Net, Msg => Msg, Receiver => Self.all.CurrentLeader);
-            -- loop until I recieve a ClientResponse and then return that
-            while not Queue.Is_Empty (Net.all (id).all) loop
-                declare
-                    Msg : Message.Message'Class :=
-                       Queue.Dequeue (Net.all (Id).all);
-                begin
-                    if (Msg in Message.ClientResponse'Class) then
-                        return Message.ClientResponse (Msg);
-                    end if;
-                    HandleMessage
-                       (Id,--
-                        Net,--
-                        Self,--
-                        Queue.Dequeue (Net.all (Id).all));
-                end;
-            end loop;
-            return Message.ClientResponse'(False, To_Unbounded_String (""));
-            --  TODO CHANGE EXIT METHOD (using a timer and a flag)
-        end FollowerBehaviour;
-    begin
-        case Self.all.CurrentType is
-            when LEADER =>
-                return LeaderBehaviour;
-            when others =>
-                return FollowerBehaviour;
-        end case;
-    end HandleClientRequest;
 
     --------------------------------------------------------------------------- PROCEDURES
 
@@ -562,13 +424,14 @@ package body Node is
                     Message.AppendEntryResponse'
                        (Self.all.CurrentTerm,--
                         Id,--
-                        False),--
+                        False,--
+                        0),--
                     MessageLeaderId);
                 return;
-            else
-                Self.all.LastPacketTimestamp := Clock;
-                Self.all.CurrentLeader       := Msg.LeaderId;
             end if;
+
+            Self.all.LastPacketTimestamp := Clock;
+            Self.all.CurrentLeader       := Msg.LeaderId;
 
             --  5. If leaderCommit > commitIndex, set commitIndex =
             --     min(leaderCommit, index of last new entry)
@@ -629,18 +492,14 @@ package body Node is
                         Message.AppendEntryResponse'
                            (Self.all.CurrentTerm,--
                             Id,--
-                            True),--
+                            True, --
+                            Self.all.Log (Self.all.Log.Last_Index).Index),--
                         MessageLeaderId);
 
                 exception
 
                     --  No element in Log at index MessagePrevLogIndex
                     when others =>
-                        --  TODO : MessagePrevLogIndex può essere maggiore della lunghezza del log
-                        --  TODO : Se il log è vuoto, l'eccezzione così com'è fatta ora gestisce correttamente
-                        --  TODO : Se il log non è vuoto, significa che mi mancano delle entries quindi rispondo false
-                        --  TODO : In teoria poi il Leader dovrebbe continuare a mandarmi le log entries dalla penultima in giù
-                        --  TODO : Fino a quando non raggiungo una entry corretta
 
                         if Self.all.Log.Is_Empty then
                             if MessagePrevLogIndex = 0 then
@@ -655,7 +514,9 @@ package body Node is
                                     Message.AppendEntryResponse'
                                        (Self.all.CurrentTerm,--
                                         Id,--
-                                        True),--
+                                        True,
+                                         Self.all.Log (Self.all.Log.Last_Index)
+                                           .Index),--
                                     MessageLeaderId);
                                 Logger.Log (LogFileName, "Append successful");
                             else
@@ -671,10 +532,26 @@ package body Node is
                                     Message.AppendEntryResponse'
                                        (Self.all.CurrentTerm,--
                                         Id,--
-                                        False),--
+                                        False, 0),--
                                     MessageLeaderId);
                                 Logger.Log (LogFileName, "Log not synched.");
                             end if;
+                        else
+                            --  2. Reply false if log doesn’t contain an entry at prevLogIndex
+                            --  whose term matches prevLogTerm (§5.3)
+                            Logger.Log
+                               (LogFileName,
+                                "Element at PrevLogIndex:" &
+                                Integer'Image (MessagePrevLogIndex) &
+                                " not found.");
+                            Respond
+                               (Net, --
+                                Message.AppendEntryResponse'
+                                   (Self.all.CurrentTerm,--
+                                    Id,--
+                                    False, 0),--
+                                MessageLeaderId);
+                            Logger.Log (LogFileName, "Log not synched.");
                         end if;
                 end;
             end if;
@@ -752,12 +629,12 @@ package body Node is
                            Self.all.Log (Self.all.Log.Last_Index).Term;
                     end if;
 
+                    --Append Message LogEntries in the log, update index and then broadcast with AppendEntry
                     Logger.Log
                        (LogFileName,
-                        "AppendEntry from " & Integer'Image (Msg.LeaderId) &
-                        " due to earthquake sensed");
-
-                    --Append Message LogEntries in the log, update index and then broadcast with AppendEntry
+                        "Broadcasting moonquake sensed by node" &
+                        Integer'Image (Msg.LeaderId) &
+                        " with the following entries:");
                     for E of MessageLogEntries loop
                         declare
                             Term  : Integer         := Self.all.CurrentTerm;
@@ -769,11 +646,20 @@ package body Node is
                             if Self.all.Log.Is_Empty then
                                 Index := 1;
                             else
-                                Index := Self.all.Log.Last_Index + 1;
+                                Index :=
+                                   Self.all.Log (Self.all.Log.Last_Index)
+                                      .Index +
+                                   1;
                             end if;
 
                             EEEE := LogEntry.LogEntry'(Term, Index, Load);
 
+                            Logger.Log
+                               (LogFileName,
+                                "{Index:" & Integer'Image (EEEE.Index) &
+                                " , Term:" & Integer'Image (EEEE.Term) & ", " &
+                                Payload_Stringify (EEEE.Peyload) & "}");
+                            Self.all.MatchIndex (Id) := Index;
                             Self.all.Log.Append (EEEE);
 
                             --  Update NextIndex(Id)
@@ -850,6 +736,7 @@ package body Node is
                     MessageSender  : Integer := Msg.Sender;
                     MessageSuccess : Boolean := Msg.Success;
                     MessageTerm    : Integer := Msg.Term;
+                    MessageIndex   : Integer := Msg.Index;
 
                 begin
 
@@ -863,7 +750,7 @@ package body Node is
                         Logger.Log
                            (LogFileName,
                             "Node " & Integer'Image (MessageSender) &
-                            " appended successfully. NextIndex(" &
+                            " appended failed. NextIndex(" &
                             Integer'Image (MessageSender) & " ) = " &
                             Integer'Image
                                (Self.all.NextIndex (MessageSender)));
@@ -903,13 +790,19 @@ package body Node is
                         Self.all.NextIndex (MessageSender) :=
                            Self.all.NextIndex (MessageSender) + 1;
 
+                        Self.all.MatchIndex (MessageSender) := MessageIndex;
+
                         Logger.Log
                            (LogFileName,
                             "Node " & Integer'Image (MessageSender) &
                             " appended successfully. NextIndex(" &
                             Integer'Image (MessageSender) & " ) = " &
                             Integer'Image
-                               (Self.all.NextIndex (MessageSender)));
+                               (Self.all.NextIndex (MessageSender)) &
+                            ", MatchIndex(" & Integer'Image (MessageSender) &
+                            " ) = " &
+                            Integer'Image
+                               (Self.all.MatchIndex (MessageSender)));
                     end if;
 
                 end;
@@ -1121,7 +1014,7 @@ package body Node is
             --  of matchIndex[i] ≥ N, and log[N].term == currentTerm:
             --  set commitIndex = N (§5.3, §5.4).
             declare
-                N     : Integer := IntegerVectorInfimum (Self.all.NextIndex);
+                N     : Integer := IntegerVectorInfimum (Self.all.MatchIndex);
                 lastV : Integer := Self.all.CommitIndex;
             begin
                 Self.all.CommitIndex := Integer'Max (N, Self.all.CommitIndex);
