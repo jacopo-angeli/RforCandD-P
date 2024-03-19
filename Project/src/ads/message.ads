@@ -53,15 +53,4 @@ package Message is
     end record;
     function Message_Stringify (Msg : in RequestVoteResponse) return String;
 
-    type ClientRequest is new Message with record
-        Peyload : Payload.Payload;
-    end record;
-    function Message_Stringify (Msg : in ClientRequest) return String;
-    
-    type ClientResponse is new Message with record
-        Result : Boolean;
-        Msg    : Unbounded_String;
-    end record;
-    function Message_Stringify (Msg : in ClientResponse) return String;
-
 end Message;
