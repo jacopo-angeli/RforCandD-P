@@ -2,10 +2,11 @@
 >Maximizing data availability and consistency, in a fault-prone network
 
 ## Authors
- Angeli Jacopo, Alberto Angeloni
-Department of Mathematics
-University of Padua, Italy
-e-mail: {jacopo.angeli, alberto.angeloni}@studenti.unipd.com
+Angeli Jacopo, Alberto Angeloni
+
+Department of Mathematics, University of Padua, Italy
+
+contacts: {jacopo.angeli, alberto.angeloni}@studenti.unipd.com
 
 ## Asbstract
 This technical report details the implementation of the Raft algorithm within a simulated seismic sensor network, with the aim of improving data availability and consistency amidst network faults. The report focuses on the practical aspects of implementing the Raft algorithm in Ada programming language, offering insights into the design choices, data structures, and communication mechanisms employed.
